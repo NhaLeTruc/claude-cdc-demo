@@ -50,7 +50,7 @@
 - [X] T013 [P] Create Debezium Connect Dockerfile with Postgres/MySQL connectors in docker/debezium/Dockerfile
 - [X] T014 [P] Create Prometheus configuration in docker/observability/prometheus.yml
 - [X] T015 [P] Create Grafana datasource configuration in docker/observability/grafana/datasources.yml
-- [ ] T016 [P] Create Grafana dashboards (CDC Overview, Postgres CDC, MySQL CDC, Data Quality) in docker/observability/grafana/dashboards/
+- [X] T016 [P] Create Grafana dashboards (CDC Overview, Postgres CDC, MySQL CDC, Data Quality) in docker/observability/grafana/dashboards/
 
 ### Common Utilities (Foundation for All Stories)
 
