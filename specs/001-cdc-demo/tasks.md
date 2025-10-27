@@ -105,22 +105,22 @@
 
 > **CONSTITUTION REQUIREMENT: Write these tests FIRST, ensure they FAIL before implementation (TDD)**
 
-- [ ] T044 [P] [US1] Unit test for Postgres connection manager in tests/unit/test_cdc_pipelines/test_postgres_connection.py
-- [ ] T045 [P] [US1] Unit test for Debezium connector config builder in tests/unit/test_cdc_pipelines/test_debezium_config.py
-- [ ] T046 [P] [US1] Unit test for CDC event parser (Debezium format → standard format) in tests/unit/test_cdc_pipelines/test_event_parser.py
-- [ ] T047 [P] [US1] Unit test for DeltaLake writer in tests/unit/test_cdc_pipelines/test_delta_writer.py
-- [ ] T048 [P] [US1] Integration test for Postgres CDC pipeline (INSERT capture) in tests/integration/test_postgres_cdc.py
-- [ ] T049 [P] [US1] Integration test for Postgres CDC pipeline (UPDATE capture) in tests/integration/test_postgres_cdc.py
-- [ ] T050 [P] [US1] Integration test for Postgres CDC pipeline (DELETE capture) in tests/integration/test_postgres_cdc.py
-- [ ] T051 [P] [US1] Data quality test for row count validation in tests/data_quality/test_integrity.py
-- [ ] T052 [P] [US1] Data quality test for checksum validation in tests/data_quality/test_integrity.py
-- [ ] T053 [P] [US1] Data quality test for CDC lag monitoring in tests/data_quality/test_lag_monitoring.py
-- [ ] T054 [P] [US1] End-to-end test for complete Postgres→DeltaLake pipeline in tests/e2e/test_postgres_to_delta.py
+- [X] T044 [P] [US1] Unit test for Postgres connection manager in tests/unit/test_cdc_pipelines/test_postgres_connection.py
+- [X] T045 [P] [US1] Unit test for Debezium connector config builder in tests/unit/test_cdc_pipelines/test_debezium_config.py
+- [X] T046 [P] [US1] Unit test for CDC event parser (Debezium format → standard format) in tests/unit/test_cdc_pipelines/test_event_parser.py
+- [X] T047 [P] [US1] Unit test for DeltaLake writer in tests/unit/test_cdc_pipelines/test_delta_writer.py
+- [X] T048 [P] [US1] Integration test for Postgres CDC pipeline (INSERT capture) in tests/integration/test_postgres_cdc.py
+- [X] T049 [P] [US1] Integration test for Postgres CDC pipeline (UPDATE capture) in tests/integration/test_postgres_cdc.py
+- [X] T050 [P] [US1] Integration test for Postgres CDC pipeline (DELETE capture) in tests/integration/test_postgres_cdc.py
+- [X] T051 [P] [US1] Data quality test for row count validation in tests/data_quality/test_integrity.py
+- [X] T052 [P] [US1] Data quality test for checksum validation in tests/data_quality/test_integrity.py
+- [X] T053 [P] [US1] Data quality test for CDC lag monitoring in tests/data_quality/test_lag_monitoring.py
+- [X] T054 [P] [US1] End-to-end test for complete Postgres→DeltaLake pipeline in tests/e2e/test_postgres_to_delta.py
 
 ### Implementation for User Story 1
 
-- [ ] T055 [P] [US1] Create Postgres connection manager in src/cdc_pipelines/postgres/connection.py
-- [ ] T056 [P] [US1] Create Debezium connector configuration builder in src/cdc_pipelines/postgres/debezium_config.py
+- [X] T055 [P] [US1] Create Postgres connection manager in src/cdc_pipelines/postgres/connection.py
+- [X] T056 [P] [US1] Create Debezium connector configuration builder in src/cdc_pipelines/postgres/debezium_config.py
 - [ ] T057 [US1] Create CDC event parser (Debezium → standard format) in src/cdc_pipelines/postgres/event_parser.py (depends on T055, T056)
 - [ ] T058 [P] [US1] Create DeltaLake destination writer in src/cdc_pipelines/postgres/delta_writer.py
 - [ ] T059 [US1] Implement Postgres CDC pipeline orchestrator in src/cdc_pipelines/postgres/pipeline.py (depends on T055-T058)
