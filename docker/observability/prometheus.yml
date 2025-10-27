@@ -1,0 +1,54 @@
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+  external_labels:
+    cluster: 'cdc-demo'
+    environment: 'local'
+
+# Alertmanager configuration
+alerting:
+  alertmanagers:
+    - static_configs:
+        - targets: []
+          # - alertmanager:9093
+
+# Load rules once and periodically evaluate them
+rule_files:
+  - '/etc/prometheus/alerts.yml'
+
+# Scrape configurations
+scrape_configs:
+  # Prometheus itself
+  - job_name: 'prometheus'
+    static_configs:
+      - targets: ['localhost:9090']
+
+  # Application metrics (CDC pipelines, validation, etc.)
+  - job_name: 'cdc-application'
+    static_configs:
+      - targets: ['host.docker.internal:8000']
+    metrics_path: '/metrics'
+
+  # Kafka Connect (Debezium)
+  - job_name: 'debezium'
+    static_configs:
+      - targets: ['debezium:8083']
+    metrics_path: '/metrics'
+
+  # PostgreSQL exporter (if installed)
+  - job_name: 'postgres'
+    static_configs:
+      - targets: ['postgres-exporter:9187']
+    # Optional: requires postgres_exporter container
+
+  # MySQL exporter (if installed)
+  - job_name: 'mysql'
+    static_configs:
+      - targets: ['mysql-exporter:9104']
+    # Optional: requires mysqld_exporter container
+
+  # Kafka exporter (if installed)
+  - job_name: 'kafka'
+    static_configs:
+      - targets: ['kafka-exporter:9308']
+    # Optional: requires kafka_exporter container

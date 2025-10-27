@@ -1,0 +1,58 @@
+groups:
+  - name: cdc_alerts
+    interval: 30s
+    rules:
+      # CDC Lag Alert
+      - alert: HighCDCLag
+        expr: cdc_lag_seconds > 10
+        for: 2m
+        labels:
+          severity: warning
+          component: cdc_pipeline
+        annotations:
+          summary: "High CDC lag detected"
+          description: "CDC lag for {{ $labels.pipeline }} is {{ $value }} seconds (threshold: 10s)"
+
+      # Connector Failure Alert
+      - alert: ConnectorFailure
+        expr: debezium_connector_status{status="FAILED"} > 0
+        for: 1m
+        labels:
+          severity: critical
+          component: debezium
+        annotations:
+          summary: "Debezium connector failed"
+          description: "Connector {{ $labels.connector }} is in FAILED state"
+
+      # Data Quality Alert
+      - alert: DataIntegrityFailure
+        expr: data_validation_failures_total > 0
+        for: 5m
+        labels:
+          severity: critical
+          component: data_quality
+        annotations:
+          summary: "Data integrity validation failed"
+          description: "{{ $value }} validation failures detected in {{ $labels.validator }}"
+
+      # High Error Rate
+      - alert: HighErrorRate
+        expr: rate(cdc_errors_total[5m]) > 1
+        for: 5m
+        labels:
+          severity: warning
+          component: cdc_pipeline
+        annotations:
+          summary: "High error rate in CDC pipeline"
+          description: "Error rate is {{ $value }} errors/sec for {{ $labels.pipeline }}"
+
+      # Service Down
+      - alert: ServiceDown
+        expr: up{job=~"cdc-application|debezium"} == 0
+        for: 1m
+        labels:
+          severity: critical
+          component: infrastructure
+        annotations:
+          summary: "Service is down"
+          description: "{{ $labels.job }} is not responding"
