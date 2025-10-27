@@ -121,19 +121,19 @@
 
 - [X] T055 [P] [US1] Create Postgres connection manager in src/cdc_pipelines/postgres/connection.py
 - [X] T056 [P] [US1] Create Debezium connector configuration builder in src/cdc_pipelines/postgres/debezium_config.py
-- [ ] T057 [US1] Create CDC event parser (Debezium → standard format) in src/cdc_pipelines/postgres/event_parser.py (depends on T055, T056)
-- [ ] T058 [P] [US1] Create DeltaLake destination writer in src/cdc_pipelines/postgres/delta_writer.py
-- [ ] T059 [US1] Implement Postgres CDC pipeline orchestrator in src/cdc_pipelines/postgres/pipeline.py (depends on T055-T058)
-- [ ] T060 [US1] Add Postgres CDC metrics export in src/observability/metrics.py
-- [ ] T061 [US1] Add Postgres CDC health check in src/observability/health.py
+- [X] T057 [US1] Create CDC event parser (Debezium → standard format) in src/cdc_pipelines/postgres/event_parser.py (depends on T055, T056)
+- [X] T058 [P] [US1] Create DeltaLake destination writer in src/cdc_pipelines/postgres/delta_writer.py
+- [X] T059 [US1] Implement Postgres CDC pipeline orchestrator in src/cdc_pipelines/postgres/pipeline.py (depends on T055-T058)
+- [X] T060 [US1] Add Postgres CDC metrics export in src/observability/metrics.py
+- [X] T061 [US1] Add Postgres CDC health check in src/observability/health.py
 - [X] T062 [US1] Create Debezium connector registration script in scripts/register-postgres-connector.sh
-- [ ] T063 [P] [US1] Implement customers table data generator in src/data_generators/generators.py
-- [ ] T064 [P] [US1] Implement orders table data generator in src/data_generators/generators.py
+- [X] T063 [P] [US1] Implement customers table data generator in src/data_generators/generators.py
+- [X] T064 [P] [US1] Implement orders table data generator in src/data_generators/generators.py
 
 ### Documentation for User Story 1
 
-- [ ] T065 [P] [US1] Create Postgres CDC pipeline README in docs/pipelines/postgres.md
-- [ ] T066 [P] [US1] Add Postgres CDC architecture diagram (Mermaid) in docs/architecture.md
+- [X] T065 [P] [US1] Create Postgres CDC pipeline README in docs/pipelines/postgres.md
+- [X] T066 [P] [US1] Add Postgres CDC architecture diagram (Mermaid) in docs/architecture.md
 
 **Checkpoint**: At this point, User Story 1 should be fully functional and testable independently
 
@@ -149,31 +149,31 @@
 
 > **CONSTITUTION REQUIREMENT: Write these tests FIRST, ensure they FAIL before implementation (TDD)**
 
-- [ ] T067 [P] [US2] Unit test for MySQL connection manager in tests/unit/test_cdc_pipelines/test_mysql_connection.py
-- [ ] T068 [P] [US2] Unit test for MySQL binlog parser in tests/unit/test_cdc_pipelines/test_binlog_parser.py
-- [ ] T069 [P] [US2] Unit test for data type preservation (VARCHAR, INT, DATETIME, JSON) in tests/unit/test_cdc_pipelines/test_data_types.py
-- [ ] T070 [P] [US2] Integration test for MySQL CDC pipeline (transaction ordering) in tests/integration/test_mysql_cdc.py
-- [ ] T071 [P] [US2] Integration test for MySQL CDC pipeline (bulk insert 100+ records) in tests/integration/test_mysql_cdc.py
-- [ ] T072 [P] [US2] Data quality test for MySQL data integrity in tests/data_quality/test_integrity.py
-- [ ] T073 [P] [US2] End-to-end test for MySQL→DeltaLake pipeline in tests/e2e/test_mysql_to_delta.py
+- [X] T067 [P] [US2] Unit test for MySQL connection manager in tests/unit/test_cdc_pipelines/test_mysql_connection.py
+- [X] T068 [P] [US2] Unit test for MySQL binlog parser in tests/unit/test_cdc_pipelines/test_binlog_parser.py
+- [X] T069 [P] [US2] Unit test for data type preservation (VARCHAR, INT, DATETIME, JSON) in tests/unit/test_cdc_pipelines/test_data_types.py
+- [X] T070 [P] [US2] Integration test for MySQL CDC pipeline (transaction ordering) in tests/integration/test_mysql_cdc.py
+- [X] T071 [P] [US2] Integration test for MySQL CDC pipeline (bulk insert 100+ records) in tests/integration/test_mysql_cdc.py
+- [X] T072 [P] [US2] Data quality test for MySQL data integrity in tests/data_quality/test_integrity.py
+- [X] T073 [P] [US2] End-to-end test for MySQL→DeltaLake pipeline in tests/e2e/test_mysql_to_delta.py
 
 ### Implementation for User Story 2
 
-- [ ] T074 [P] [US2] Create MySQL connection manager in src/cdc_pipelines/mysql/connection.py
-- [ ] T075 [P] [US2] Create Debezium MySQL connector configuration in src/cdc_pipelines/mysql/debezium_config.py
-- [ ] T076 [US2] Create MySQL binlog event parser in src/cdc_pipelines/mysql/event_parser.py
-- [ ] T077 [P] [US2] Create DeltaLake writer for MySQL data in src/cdc_pipelines/mysql/delta_writer.py
-- [ ] T078 [US2] Implement MySQL CDC pipeline orchestrator in src/cdc_pipelines/mysql/pipeline.py (depends on T074-T077)
-- [ ] T079 [US2] Add MySQL CDC metrics export in src/observability/metrics.py
-- [ ] T080 [US2] Add MySQL CDC health check in src/observability/health.py
+- [X] T074 [P] [US2] Create MySQL connection manager in src/cdc_pipelines/mysql/connection.py
+- [X] T075 [P] [US2] Create Debezium MySQL connector configuration in src/cdc_pipelines/mysql/debezium_config.py
+- [X] T076 [US2] Create MySQL binlog event parser in src/cdc_pipelines/mysql/event_parser.py
+- [X] T077 [P] [US2] Create DeltaLake writer for MySQL data in src/cdc_pipelines/mysql/delta_writer.py
+- [X] T078 [US2] Implement MySQL CDC pipeline orchestrator in src/cdc_pipelines/mysql/pipeline.py (depends on T074-T077)
+- [X] T079 [US2] Add MySQL CDC metrics export in src/observability/metrics.py
+- [X] T080 [US2] Add MySQL CDC health check in src/observability/health.py
 - [X] T081 [US2] Create Debezium MySQL connector registration script in scripts/register-mysql-connector.sh
-- [ ] T082 [P] [US2] Implement products table data generator in src/data_generators/generators.py
-- [ ] T083 [P] [US2] Implement inventory_transactions table data generator in src/data_generators/generators.py
+- [X] T082 [P] [US2] Implement products table data generator in src/data_generators/generators.py
+- [X] T083 [P] [US2] Implement inventory_transactions table data generator in src/data_generators/generators.py
 
 ### Documentation for User Story 2
 
-- [ ] T084 [P] [US2] Create MySQL CDC pipeline README in docs/pipelines/mysql.md
-- [ ] T085 [P] [US2] Add MySQL CDC architecture diagram in docs/architecture.md
+- [X] T084 [P] [US2] Create MySQL CDC pipeline README in docs/pipelines/mysql.md
+- [X] T085 [P] [US2] Add MySQL CDC architecture diagram in docs/architecture.md
 
 **Checkpoint**: At this point, User Stories 1 AND 2 should both work independently
 
