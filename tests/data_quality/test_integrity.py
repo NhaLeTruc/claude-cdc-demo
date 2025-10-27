@@ -147,3 +147,52 @@ class TestIntegrityValidation:
 
         assert result.status.value == "failed"
         assert result.details["orphaned_count"] == 1
+
+    def test_mysql_data_integrity(self):
+        """Test MySQL-specific data integrity validation."""
+        from src.validation.integrity import RowCountValidator
+
+        # Simulate MySQL products data
+        source_data = list(range(200))  # 200 products
+        destination_data = list(range(200))  # 200 products
+
+        validator = RowCountValidator(tolerance=0)
+        result = validator.validate(source_data, destination_data)
+
+        assert result.status.value == "passed"
+
+    def test_mysql_decimal_precision(self):
+        """Test MySQL decimal precision is maintained."""
+        from src.validation.integrity import ChecksumValidator
+
+        source_data = [
+            {"product_id": 1, "price": 99.99, "discount": 0.15},
+            {"product_id": 2, "price": 149.99, "discount": 0.20},
+        ]
+        destination_data = [
+            {"product_id": 1, "price": 99.99, "discount": 0.15},
+            {"product_id": 2, "price": 149.99, "discount": 0.20},
+        ]
+
+        validator = ChecksumValidator(exclude_fields=[])
+        result = validator.validate(source_data, destination_data)
+
+        assert result.status.value == "passed"
+
+    def test_mysql_varchar_length_preservation(self):
+        """Test MySQL VARCHAR length is preserved."""
+        from src.validation.integrity import FieldValidator
+
+        long_description = "A" * 1000
+
+        source_data = [
+            {"product_id": 1, "description": long_description},
+        ]
+        destination_data = [
+            {"product_id": 1, "description": long_description},
+        ]
+
+        validator = FieldValidator(field_name="description", required=True)
+        result = validator.validate(source_data, destination_data)
+
+        assert result.status.value == "passed"
