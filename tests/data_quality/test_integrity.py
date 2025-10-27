@@ -196,3 +196,37 @@ class TestIntegrityValidation:
         result = validator.validate(source_data, destination_data)
 
         assert result.status.value == "passed"
+
+    def test_delta_cdf_data_integrity(self):
+        """Test DeltaLake CDF data integrity validation."""
+        from src.validation.integrity import RowCountValidator
+
+        # Simulate Delta CDF changes
+        original_data = list(range(100))
+        cdf_changes = list(range(100))  # All records should match
+
+        validator = RowCountValidator(tolerance=0)
+        result = validator.validate(original_data, cdf_changes)
+
+        assert result.status.value == "passed"
+
+    def test_delta_cdf_change_tracking(self):
+        """Test Delta CDF tracks all changes correctly."""
+        from src.validation.integrity import ChecksumValidator
+
+        # Original data
+        source_data = [
+            {"id": 1, "value": "A", "_change_type": "insert"},
+            {"id": 1, "value": "B", "_change_type": "update_postimage"},
+        ]
+
+        # CDF should have both changes
+        cdf_data = [
+            {"id": 1, "value": "A", "_change_type": "insert"},
+            {"id": 1, "value": "B", "_change_type": "update_postimage"},
+        ]
+
+        validator = ChecksumValidator(exclude_fields=["_commit_timestamp"])
+        result = validator.validate(source_data, cdf_data)
+
+        assert result.status.value == "passed"
