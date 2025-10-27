@@ -31,7 +31,21 @@
 
 *GATE: Must pass before Phase 0 research. Re-check after Phase 1 design.*
 
-[Gates determined based on constitution file]
+Verify compliance with [Postgres CDC Demo Constitution](.specify/memory/constitution.md):
+
+- [ ] **Test-First Development**: Tests will be written BEFORE implementation (TDD enforced)
+- [ ] **Data Quality Assurance**: Data integrity validation planned at every CDC stage
+- [ ] **Local-First Demonstration**: Full stack runnable locally via Docker Compose
+- [ ] **Multi-Storage CDC Coverage**: Relevant storage CDC mechanisms identified and planned
+- [ ] **Clean Code**: Code style guides and best practices defined
+- [ ] **Observability**: Structured logging, metrics, and health checks planned
+- [ ] **Documentation**: Architecture diagrams, README, and quickstart guide included
+
+**Complexity Justification Required For**:
+- External dependencies (cloud services, paid APIs)
+- Setup time exceeding 10 minutes
+- Resource requirements beyond 8GB RAM, 4 CPU cores
+- CDC lag exceeding 5 seconds for demo workloads
 
 ## Project Structure
 

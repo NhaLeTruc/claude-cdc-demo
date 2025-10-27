@@ -79,21 +79,24 @@ Examples of foundational tasks (adjust based on your project):
 
 **Independent Test**: [How to verify this story works on its own]
 
-### Tests for User Story 1 (OPTIONAL - only if tests requested) ⚠️
+### Tests for User Story 1 (MANDATORY per Constitution) ⚠️
 
-> **NOTE: Write these tests FIRST, ensure they FAIL before implementation**
+> **CONSTITUTION REQUIREMENT: Write these tests FIRST, ensure they FAIL before implementation (TDD)**
 
 - [ ] T010 [P] [US1] Contract test for [endpoint] in tests/contract/test_[name].py
 - [ ] T011 [P] [US1] Integration test for [user journey] in tests/integration/test_[name].py
+- [ ] T012 [P] [US1] Data quality test for [CDC pipeline/data validation] in tests/data_quality/test_[name].py
+- [ ] T013 [P] [US1] End-to-end CDC pipeline test in tests/e2e/test_[name].py
 
 ### Implementation for User Story 1
 
-- [ ] T012 [P] [US1] Create [Entity1] model in src/models/[entity1].py
-- [ ] T013 [P] [US1] Create [Entity2] model in src/models/[entity2].py
-- [ ] T014 [US1] Implement [Service] in src/services/[service].py (depends on T012, T013)
-- [ ] T015 [US1] Implement [endpoint/feature] in src/[location]/[file].py
-- [ ] T016 [US1] Add validation and error handling
-- [ ] T017 [US1] Add logging for user story 1 operations
+- [ ] T014 [P] [US1] Create [Entity1] model in src/models/[entity1].py
+- [ ] T015 [P] [US1] Create [Entity2] model in src/models/[entity2].py
+- [ ] T016 [US1] Implement [Service] in src/services/[service].py (depends on T014, T015)
+- [ ] T017 [US1] Implement [endpoint/feature] in src/[location]/[file].py
+- [ ] T018 [US1] Add data validation and error handling
+- [ ] T019 [US1] Add structured logging (JSON format) for user story 1 operations
+- [ ] T020 [US1] Add metrics and health check endpoints
 
 **Checkpoint**: At this point, User Story 1 should be fully functional and testable independently
 
@@ -105,17 +108,21 @@ Examples of foundational tasks (adjust based on your project):
 
 **Independent Test**: [How to verify this story works on its own]
 
-### Tests for User Story 2 (OPTIONAL - only if tests requested) ⚠️
+### Tests for User Story 2 (MANDATORY per Constitution) ⚠️
 
-- [ ] T018 [P] [US2] Contract test for [endpoint] in tests/contract/test_[name].py
-- [ ] T019 [P] [US2] Integration test for [user journey] in tests/integration/test_[name].py
+> **CONSTITUTION REQUIREMENT: Write these tests FIRST, ensure they FAIL before implementation (TDD)**
+
+- [ ] T021 [P] [US2] Contract test for [endpoint] in tests/contract/test_[name].py
+- [ ] T022 [P] [US2] Integration test for [user journey] in tests/integration/test_[name].py
+- [ ] T023 [P] [US2] Data quality test for [CDC pipeline/data validation] in tests/data_quality/test_[name].py
 
 ### Implementation for User Story 2
 
-- [ ] T020 [P] [US2] Create [Entity] model in src/models/[entity].py
-- [ ] T021 [US2] Implement [Service] in src/services/[service].py
-- [ ] T022 [US2] Implement [endpoint/feature] in src/[location]/[file].py
-- [ ] T023 [US2] Integrate with User Story 1 components (if needed)
+- [ ] T024 [P] [US2] Create [Entity] model in src/models/[entity].py
+- [ ] T025 [US2] Implement [Service] in src/services/[service].py
+- [ ] T026 [US2] Implement [endpoint/feature] in src/[location]/[file].py
+- [ ] T027 [US2] Add structured logging and metrics
+- [ ] T028 [US2] Integrate with User Story 1 components (if needed)
 
 **Checkpoint**: At this point, User Stories 1 AND 2 should both work independently
 
@@ -127,16 +134,20 @@ Examples of foundational tasks (adjust based on your project):
 
 **Independent Test**: [How to verify this story works on its own]
 
-### Tests for User Story 3 (OPTIONAL - only if tests requested) ⚠️
+### Tests for User Story 3 (MANDATORY per Constitution) ⚠️
 
-- [ ] T024 [P] [US3] Contract test for [endpoint] in tests/contract/test_[name].py
-- [ ] T025 [P] [US3] Integration test for [user journey] in tests/integration/test_[name].py
+> **CONSTITUTION REQUIREMENT: Write these tests FIRST, ensure they FAIL before implementation (TDD)**
+
+- [ ] T029 [P] [US3] Contract test for [endpoint] in tests/contract/test_[name].py
+- [ ] T030 [P] [US3] Integration test for [user journey] in tests/integration/test_[name].py
+- [ ] T031 [P] [US3] Data quality test for [CDC pipeline/data validation] in tests/data_quality/test_[name].py
 
 ### Implementation for User Story 3
 
-- [ ] T026 [P] [US3] Create [Entity] model in src/models/[entity].py
-- [ ] T027 [US3] Implement [Service] in src/services/[service].py
-- [ ] T028 [US3] Implement [endpoint/feature] in src/[location]/[file].py
+- [ ] T032 [P] [US3] Create [Entity] model in src/models/[entity].py
+- [ ] T033 [US3] Implement [Service] in src/services/[service].py
+- [ ] T034 [US3] Implement [endpoint/feature] in src/[location]/[file].py
+- [ ] T035 [US3] Add structured logging and metrics
 
 **Checkpoint**: All user stories should now be independently functional
 
@@ -150,12 +161,28 @@ Examples of foundational tasks (adjust based on your project):
 
 **Purpose**: Improvements that affect multiple user stories
 
-- [ ] TXXX [P] Documentation updates in docs/
+### Observability & Monitoring (MANDATORY per Constitution)
+
+- [ ] TXXX [P] Setup observability stack: Prometheus, Grafana, Loki in docker-compose.yml
+- [ ] TXXX [P] Add CDC lag monitoring dashboards
+- [ ] TXXX [P] Add data quality validation dashboards
+- [ ] TXXX Verify structured logging (JSON) across all services
+- [ ] TXXX Verify health check endpoints for all services
+
+### Documentation (MANDATORY per Constitution)
+
+- [ ] TXXX [P] Create architecture diagram (Mermaid/PlantUML) in docs/architecture.md
+- [ ] TXXX [P] Write README for each CDC pipeline explaining data flow and technologies
+- [ ] TXXX Update quickstart.md with one-command setup instructions
+- [ ] TXXX Verify quickstart.md on clean machine (test setup time < 10 minutes)
+- [ ] TXXX Document pros/cons of each CDC approach
+
+### Final Quality Gates
+
 - [ ] TXXX Code cleanup and refactoring
-- [ ] TXXX Performance optimization across all stories
-- [ ] TXXX [P] Additional unit tests (if requested) in tests/unit/
-- [ ] TXXX Security hardening
-- [ ] TXXX Run quickstart.md validation
+- [ ] TXXX Performance validation: CDC lag < 5 seconds, RAM < 8GB, CPU < 4 cores
+- [ ] TXXX Security review: no committed secrets, proper .env.example
+- [ ] TXXX Test coverage validation (unit, integration, data quality, e2e)
 
 ---
 
