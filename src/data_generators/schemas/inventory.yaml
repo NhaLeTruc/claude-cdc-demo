@@ -1,0 +1,78 @@
+# Inventory Transaction Schema Definition
+table_name: inventory_transactions
+description: Inventory transaction data schema for CDC demo
+
+fields:
+  - name: transaction_id
+    type: SERIAL
+    primary_key: true
+    description: Unique transaction identifier
+
+  - name: product_id
+    type: INTEGER
+    nullable: false
+    foreign_key:
+      table: products
+      column: product_id
+    description: Reference to product
+
+  - name: transaction_type
+    type: ENUM('IN','OUT','ADJUSTMENT')
+    nullable: false
+    enum: [IN, OUT, ADJUSTMENT]
+    description: Type of inventory transaction
+
+  - name: quantity
+    type: INTEGER
+    nullable: false
+    faker_method: random_int
+    faker_args:
+      min: 1
+      max: 100
+    description: Transaction quantity
+
+  - name: previous_quantity
+    type: INTEGER
+    nullable: false
+    description: Quantity before transaction
+
+  - name: new_quantity
+    type: INTEGER
+    nullable: false
+    description: Quantity after transaction
+
+  - name: reason
+    type: VARCHAR(255)
+    nullable: true
+    enum:
+      - "Purchase order received"
+      - "Customer order fulfilled"
+      - "Inventory adjustment"
+      - "Damaged goods"
+      - "Return processed"
+      - "Stock transfer"
+    description: Reason for transaction
+
+  - name: transaction_date
+    type: TIMESTAMP
+    default: CURRENT_TIMESTAMP
+    faker_method: date_time_between
+    faker_args:
+      start_date: "-7d"
+      end_date: "now"
+    description: Transaction timestamp
+
+indexes:
+  - name: idx_inventory_product_id
+    columns: [product_id]
+
+  - name: idx_inventory_transaction_type
+    columns: [transaction_type]
+
+  - name: idx_inventory_transaction_date
+    columns: [transaction_date]
+
+generation_rules:
+  default_count: 2000
+  batch_size: 200
+  depends_on: [products]

@@ -1,0 +1,82 @@
+# Customer Schema Definition
+table_name: customers
+description: Customer data schema for CDC demo
+
+fields:
+  - name: customer_id
+    type: SERIAL
+    primary_key: true
+    description: Unique customer identifier
+
+  - name: first_name
+    type: VARCHAR(100)
+    nullable: false
+    faker_method: first_name
+    description: Customer first name
+
+  - name: last_name
+    type: VARCHAR(100)
+    nullable: false
+    faker_method: last_name
+    description: Customer last name
+
+  - name: email
+    type: VARCHAR(255)
+    nullable: false
+    unique: true
+    faker_method: email
+    description: Customer email address
+
+  - name: phone
+    type: VARCHAR(20)
+    nullable: true
+    faker_method: phone_number
+    description: Customer phone number
+
+  - name: address
+    type: TEXT
+    nullable: true
+    faker_method: street_address
+    description: Street address
+
+  - name: city
+    type: VARCHAR(100)
+    nullable: true
+    faker_method: city
+    description: City name
+
+  - name: state
+    type: VARCHAR(50)
+    nullable: true
+    faker_method: state_abbr
+    description: State abbreviation
+
+  - name: zip_code
+    type: VARCHAR(20)
+    nullable: true
+    faker_method: zipcode
+    description: ZIP/Postal code
+
+  - name: country
+    type: VARCHAR(100)
+    default: USA
+    description: Country name
+
+  - name: created_at
+    type: TIMESTAMP
+    default: CURRENT_TIMESTAMP
+    description: Record creation timestamp
+
+  - name: updated_at
+    type: TIMESTAMP
+    default: CURRENT_TIMESTAMP
+    description: Record last update timestamp
+
+indexes:
+  - name: idx_customers_email
+    columns: [email]
+    unique: true
+
+generation_rules:
+  default_count: 1000
+  batch_size: 100

@@ -1,0 +1,68 @@
+# Product Schema Definition
+table_name: products
+description: Product data schema for CDC demo
+
+fields:
+  - name: product_id
+    type: SERIAL
+    primary_key: true
+    description: Unique product identifier
+
+  - name: product_name
+    type: VARCHAR(255)
+    nullable: false
+    faker_method: catch_phrase
+    description: Product name
+
+  - name: description
+    type: TEXT
+    nullable: true
+    faker_method: text
+    faker_args:
+      max_nb_chars: 200
+    description: Product description
+
+  - name: category
+    type: VARCHAR(100)
+    nullable: true
+    enum: [Electronics, Furniture, Clothing, Books, Toys, Sports, "Home & Garden", Automotive]
+    description: Product category
+
+  - name: price
+    type: DECIMAL(10,2)
+    nullable: false
+    faker_method: pydecimal
+    faker_args:
+      left_digits: 3
+      right_digits: 2
+      positive: true
+      min_value: 9.99
+      max_value: 999.99
+    description: Product price
+
+  - name: stock_quantity
+    type: INTEGER
+    default: 0
+    faker_method: random_int
+    faker_args:
+      min: 0
+      max: 500
+    description: Available stock quantity
+
+  - name: created_at
+    type: TIMESTAMP
+    default: CURRENT_TIMESTAMP
+    description: Record creation timestamp
+
+  - name: updated_at
+    type: TIMESTAMP
+    default: CURRENT_TIMESTAMP
+    description: Record last update timestamp
+
+indexes:
+  - name: idx_products_category
+    columns: [category]
+
+generation_rules:
+  default_count: 500
+  batch_size: 50
