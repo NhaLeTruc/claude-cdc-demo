@@ -48,7 +48,51 @@ data_validation_failures_total = Counter(
 row_count_difference = Gauge(
     "row_count_difference",
     "Difference between source and destination row counts",
+    ["pipeline"],
+)
+
+# Postgres CDC Specific Metrics
+postgres_cdc_events_processed_total = Counter(
+    "postgres_cdc_events_processed_total",
+    "Total Postgres CDC events processed",
+    ["table", "operation"],
+)
+
+postgres_cdc_batch_size = Histogram(
+    "postgres_cdc_batch_size",
+    "Size of Postgres CDC event batches",
+    buckets=[1, 10, 50, 100, 500, 1000, 5000],
+)
+
+postgres_cdc_lag_seconds = Gauge(
+    "postgres_cdc_lag_seconds",
+    "Current Postgres CDC lag in seconds",
     ["pipeline", "table"],
+)
+
+# MySQL CDC Specific Metrics
+mysql_cdc_events_processed_total = Counter(
+    "mysql_cdc_events_processed_total",
+    "Total MySQL CDC events processed",
+    ["table", "operation"],
+)
+
+mysql_cdc_batch_size = Histogram(
+    "mysql_cdc_batch_size",
+    "Size of MySQL CDC event batches",
+    buckets=[1, 10, 50, 100, 500, 1000, 5000],
+)
+
+mysql_cdc_lag_seconds = Gauge(
+    "mysql_cdc_lag_seconds",
+    "Current MySQL CDC lag in seconds",
+    ["pipeline", "table"],
+)
+
+mysql_binlog_position = Gauge(
+    "mysql_binlog_position",
+    "Current MySQL binlog position",
+    ["server", "binlog_file"],
 )
 
 checksum_mismatches = Counter(
