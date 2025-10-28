@@ -1,0 +1,440 @@
+apiVersion: 1
+
+groups:
+  - orgId: 1
+    name: Debezium Connector Alerts
+    folder: CDC Monitoring
+    interval: 30s
+    rules:
+      # Alert: Debezium Connector Failed
+      - uid: connector_failed
+        title: Debezium Connector Failed
+        condition: C
+        data:
+          - refId: A
+            relativeTimeRange:
+              from: 300
+              to: 0
+            datasourceUid: prometheus
+            model:
+              expr: debezium_connector_status{status="FAILED"}
+              refId: A
+
+          - refId: B
+            datasourceUid: __expr__
+            model:
+              conditions:
+                - evaluator:
+                    params:
+                      - 0
+                    type: gt
+                  query:
+                    params:
+                      - A
+                  reducer:
+                    params: []
+                    type: last
+              expression: A
+              refId: B
+              type: threshold
+
+          - refId: C
+            datasourceUid: __expr__
+            model:
+              expression: B
+              refId: C
+              type: classic_conditions
+
+        noDataState: NoData
+        execErrState: Alerting
+        for: 1m
+        annotations:
+          summary: Debezium connector in FAILED state
+          description: |
+            Connector {{ $labels.connector }} is in FAILED state.
+            Pipeline: {{ $labels.pipeline }}
+            Immediate action required to restore CDC functionality.
+            Check connector logs for error details.
+        labels:
+          severity: critical
+          component: debezium
+          runbook: https://docs.debezium.io/troubleshooting
+        isPaused: false
+
+      # Alert: Connector Paused
+      - uid: connector_paused
+        title: Debezium Connector Paused
+        condition: C
+        data:
+          - refId: A
+            relativeTimeRange:
+              from: 300
+              to: 0
+            datasourceUid: prometheus
+            model:
+              expr: debezium_connector_status{status="PAUSED"}
+              refId: A
+
+          - refId: B
+            datasourceUid: __expr__
+            model:
+              conditions:
+                - evaluator:
+                    params:
+                      - 0
+                    type: gt
+                  query:
+                    params:
+                      - A
+                  reducer:
+                    params: []
+                    type: last
+              expression: A
+              refId: B
+              type: threshold
+
+          - refId: C
+            datasourceUid: __expr__
+            model:
+              expression: B
+              refId: C
+              type: classic_conditions
+
+        noDataState: NoData
+        execErrState: Error
+        for: 5m
+        annotations:
+          summary: Debezium connector is paused
+          description: |
+            Connector {{ $labels.connector }} has been in PAUSED state for 5+ minutes.
+            Pipeline: {{ $labels.pipeline }}
+            CDC is not capturing changes while paused.
+            Resume connector if this is unintentional.
+        labels:
+          severity: warning
+          component: debezium
+        isPaused: false
+
+      # Alert: Connector Unassigned
+      - uid: connector_unassigned
+        title: Debezium Connector Unassigned
+        condition: C
+        data:
+          - refId: A
+            relativeTimeRange:
+              from: 300
+              to: 0
+            datasourceUid: prometheus
+            model:
+              expr: debezium_connector_status{status="UNASSIGNED"}
+              refId: A
+
+          - refId: B
+            datasourceUid: __expr__
+            model:
+              conditions:
+                - evaluator:
+                    params:
+                      - 0
+                    type: gt
+                  query:
+                    params:
+                      - A
+                  reducer:
+                    params: []
+                    type: last
+              expression: A
+              refId: B
+              type: threshold
+
+          - refId: C
+            datasourceUid: __expr__
+            model:
+              expression: B
+              refId: C
+              type: classic_conditions
+
+        noDataState: NoData
+        execErrState: Error
+        for: 2m
+        annotations:
+          summary: Debezium connector unassigned to worker
+          description: |
+            Connector {{ $labels.connector }} is UNASSIGNED.
+            Pipeline: {{ $labels.pipeline }}
+            No worker is running this connector.
+            Check Kafka Connect cluster health and worker availability.
+        labels:
+          severity: warning
+          component: debezium
+        isPaused: false
+
+      # Alert: Connector Restarting Frequently
+      - uid: connector_restart_loop
+        title: Connector Restarting Frequently
+        condition: C
+        data:
+          - refId: A
+            relativeTimeRange:
+              from: 900
+              to: 0
+            datasourceUid: prometheus
+            model:
+              expr: increase(debezium_connector_restarts_total[15m])
+              refId: A
+
+          - refId: B
+            datasourceUid: __expr__
+            model:
+              conditions:
+                - evaluator:
+                    params:
+                      - 3
+                    type: gt
+                  query:
+                    params:
+                      - A
+                  reducer:
+                    params: []
+                    type: last
+              expression: A
+              refId: B
+              type: threshold
+
+          - refId: C
+            datasourceUid: __expr__
+            model:
+              expression: B
+              refId: C
+              type: classic_conditions
+
+        noDataState: NoData
+        execErrState: Error
+        for: 5m
+        annotations:
+          summary: Connector restarting too frequently
+          description: |
+            Connector {{ $labels.connector }} has restarted {{ $values.A }} times in 15 minutes.
+            Pipeline: {{ $labels.pipeline }}
+            This indicates an unstable connector configuration or infrastructure issue.
+            Check connector logs and configuration.
+        labels:
+          severity: critical
+          component: debezium
+        isPaused: false
+
+      # Alert: Connector Task Failed
+      - uid: connector_task_failed
+        title: Connector Task Failed
+        condition: C
+        data:
+          - refId: A
+            relativeTimeRange:
+              from: 300
+              to: 0
+            datasourceUid: prometheus
+            model:
+              expr: debezium_connector_task_status{status="FAILED"}
+              refId: A
+
+          - refId: B
+            datasourceUid: __expr__
+            model:
+              conditions:
+                - evaluator:
+                    params:
+                      - 0
+                    type: gt
+                  query:
+                    params:
+                      - A
+                  reducer:
+                    params: []
+                    type: last
+              expression: A
+              refId: B
+              type: threshold
+
+          - refId: C
+            datasourceUid: __expr__
+            model:
+              expression: B
+              refId: C
+              type: classic_conditions
+
+        noDataState: NoData
+        execErrState: Error
+        for: 1m
+        annotations:
+          summary: Connector task in FAILED state
+          description: |
+            Task {{ $labels.task_id }} of connector {{ $labels.connector }} has failed.
+            Pipeline: {{ $labels.pipeline }}
+            CDC processing may be partially impaired.
+            Check task logs for failure details.
+        labels:
+          severity: warning
+          component: debezium
+        isPaused: false
+
+      # Alert: Kafka Connect Service Down
+      - uid: kafka_connect_down
+        title: Kafka Connect Service Down
+        condition: C
+        data:
+          - refId: A
+            relativeTimeRange:
+              from: 300
+              to: 0
+            datasourceUid: prometheus
+            model:
+              expr: up{job="kafka-connect"}
+              refId: A
+
+          - refId: B
+            datasourceUid: __expr__
+            model:
+              conditions:
+                - evaluator:
+                    params:
+                      - 1
+                    type: lt
+                  query:
+                    params:
+                      - A
+                  reducer:
+                    params: []
+                    type: last
+              expression: A
+              refId: B
+              type: threshold
+
+          - refId: C
+            datasourceUid: __expr__
+            model:
+              expression: B
+              refId: C
+              type: classic_conditions
+
+        noDataState: Alerting
+        execErrState: Alerting
+        for: 1m
+        annotations:
+          summary: Kafka Connect service is down
+          description: |
+            Kafka Connect service is not responding.
+            All Debezium connectors are affected.
+            CDC is completely stopped.
+            Check service health and restart if necessary.
+        labels:
+          severity: critical
+          component: kafka_connect
+        isPaused: false
+
+      # Alert: Source Database Unreachable
+      - uid: source_db_unreachable
+        title: Source Database Unreachable
+        condition: C
+        data:
+          - refId: A
+            relativeTimeRange:
+              from: 300
+              to: 0
+            datasourceUid: prometheus
+            model:
+              expr: debezium_connector_source_database_connection_errors_total
+              refId: A
+
+          - refId: B
+            datasourceUid: __expr__
+            model:
+              conditions:
+                - evaluator:
+                    params:
+                      - 0
+                    type: gt
+                  query:
+                    params:
+                      - A
+                  reducer:
+                    params: []
+                    type: increase
+              expression: A
+              refId: B
+              type: threshold
+
+          - refId: C
+            datasourceUid: __expr__
+            model:
+              expression: B
+              refId: C
+              type: classic_conditions
+
+        noDataState: NoData
+        execErrState: Error
+        for: 2m
+        annotations:
+          summary: Connector cannot reach source database
+          description: |
+            Connector {{ $labels.connector }} is experiencing database connection errors.
+            Pipeline: {{ $labels.pipeline }}
+            Error count: {{ $values.A }}
+            Check network connectivity and database health.
+        labels:
+          severity: critical
+          component: debezium
+        isPaused: false
+
+      # Alert: Snapshot Not Completing
+      - uid: snapshot_stuck
+        title: Initial Snapshot Taking Too Long
+        condition: C
+        data:
+          - refId: A
+            relativeTimeRange:
+              from: 1800
+              to: 0
+            datasourceUid: prometheus
+            model:
+              expr: debezium_connector_snapshot_running
+              refId: A
+
+          - refId: B
+            datasourceUid: __expr__
+            model:
+              conditions:
+                - evaluator:
+                    params:
+                      - 0
+                    type: gt
+                  query:
+                    params:
+                      - A
+                  reducer:
+                    params: []
+                    type: last
+              expression: A
+              refId: B
+              type: threshold
+
+          - refId: C
+            datasourceUid: __expr__
+            model:
+              expression: B
+              refId: C
+              type: classic_conditions
+
+        noDataState: NoData
+        execErrState: Error
+        for: 30m
+        annotations:
+          summary: Connector initial snapshot running for extended time
+          description: |
+            Connector {{ $labels.connector }} has been running initial snapshot for 30+ minutes.
+            Pipeline: {{ $labels.pipeline }}
+            This may be normal for large tables, but verify progress.
+            Check snapshot.mode configuration if this is unexpected.
+        labels:
+          severity: info
+          component: debezium
+        isPaused: false

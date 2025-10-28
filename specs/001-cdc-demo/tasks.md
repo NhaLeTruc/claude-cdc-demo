@@ -312,15 +312,15 @@
 
 **Purpose**: Complete observability stack for all CDC pipelines
 
-- [ ] T145 [P] Create CDC Overview Grafana dashboard JSON in docker/observability/grafana/dashboards/cdc_overview.json
-- [ ] T146 [P] Create Postgres CDC Grafana dashboard JSON in docker/observability/grafana/dashboards/postgres_cdc.json
-- [ ] T147 [P] Create MySQL CDC Grafana dashboard JSON in docker/observability/grafana/dashboards/mysql_cdc.json
-- [ ] T148 [P] Create Data Quality Grafana dashboard JSON in docker/observability/grafana/dashboards/data_quality.json
-- [ ] T149 [P] Implement CDC lag alert rules in docker/observability/prometheus_alerts.yml
-- [ ] T150 [P] Implement error rate alert rules in docker/observability/prometheus_alerts.yml
-- [ ] T151 [P] Create Loki log aggregation config in docker/observability/loki.yml
-- [ ] T152 Verify all services emit structured JSON logs
-- [ ] T153 Verify all pipelines have health check endpoints
+- [X] T145 [P] Create CDC Overview Grafana dashboard JSON in docker/observability/grafana/dashboards/cdc_overview.json
+- [X] T146 [P] Create Postgres CDC Grafana dashboard JSON in docker/observability/grafana/dashboards/postgres_cdc.json
+- [X] T147 [P] Create MySQL CDC Grafana dashboard JSON in docker/observability/grafana/dashboards/mysql_cdc.json
+- [X] T148 [P] Create Data Quality Grafana dashboard JSON in docker/observability/grafana/dashboards/data_quality.json
+- [X] T149 [P] Implement CDC lag alert rules in docker/observability/prometheus_alerts.yml
+- [X] T150 [P] Implement error rate alert rules in docker/observability/prometheus_alerts.yml
+- [X] T151 [P] Create Loki log aggregation config in docker/observability/loki.yml
+- [X] T152 Verify all services emit structured JSON logs
+- [X] T153 Verify all pipelines have health check endpoints
 - [X] T154 Create monitoring validation script in scripts/validate-monitoring.sh
 
 ---
@@ -356,10 +356,10 @@
 - [ ] T172 Validate docker-compose.yml starts all services successfully
 - [ ] T173 Run quickstart.md validation on clean machine
 - [ ] T174 Generate final validation report
-- [ ] T175 [P] Configure Prometheus Alertmanager in docker/observability/alertmanager.yml
-- [ ] T176 [P] Create Grafana alert rules for CDC lag >10s in docker/observability/grafana/alerts/cdc_alerts.yml
-- [ ] T177 [P] Create Grafana alert rules for connector failures in docker/observability/grafana/alerts/connector_alerts.yml
-- [ ] T178 Test alert delivery mechanisms (email/webhook integration) in tests/integration/test_alerting.py
+- [X] T175 [P] Configure Prometheus Alertmanager in docker/observability/alertmanager.yml
+- [X] T176 [P] Create Grafana alert rules for CDC lag >10s in docker/observability/grafana/alerts/cdc_alerts.yml
+- [X] T177 [P] Create Grafana alert rules for connector failures in docker/observability/grafana/alerts/connector_alerts.yml
+- [X] T178 Test alert delivery mechanisms (email/webhook integration) in tests/integration/test_alerting.py
 
 ---
 
