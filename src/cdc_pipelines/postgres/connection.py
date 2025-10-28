@@ -119,7 +119,8 @@ class PostgresConnectionManager:
         conn = self.get_connection()
         with conn.cursor() as cursor:
             cursor.execute(query, params)
-            if fetch:
+            # Check if query returns results (SELECT, RETURNING, etc.)
+            if fetch and cursor.description:
                 return cursor.fetchall()  # type: ignore
             conn.commit()
             return None
