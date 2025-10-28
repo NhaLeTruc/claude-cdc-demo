@@ -126,6 +126,37 @@ deltalake_version_processing_duration = Histogram(
     buckets=[0.01, 0.05, 0.1, 0.5, 1.0, 5.0, 10.0, 30.0, 60.0],
 )
 
+# Iceberg CDC Specific Metrics
+iceberg_snapshot_id = Gauge(
+    "iceberg_snapshot_id",
+    "Current Iceberg table snapshot ID",
+    ["table_identifier"],
+)
+
+iceberg_snapshots_lag = Gauge(
+    "iceberg_snapshots_lag",
+    "Number of snapshots behind in processing",
+    ["table_identifier"],
+)
+
+iceberg_incremental_rows_processed = Counter(
+    "iceberg_incremental_rows_processed_total",
+    "Total rows processed incrementally from Iceberg",
+    ["table_identifier"],
+)
+
+iceberg_snapshot_processing_duration = Histogram(
+    "iceberg_snapshot_processing_duration_seconds",
+    "Time taken to process snapshot-to-snapshot incremental read",
+    buckets=[0.1, 0.5, 1.0, 5.0, 10.0, 30.0, 60.0, 120.0, 300.0],
+)
+
+iceberg_incremental_batch_size = Histogram(
+    "iceberg_incremental_batch_size",
+    "Size of incremental data batches from Iceberg",
+    buckets=[10, 100, 1000, 10000, 100000, 1000000],
+)
+
 checksum_mismatches = Counter(
     "checksum_mismatches_total",
     "Total number of checksum mismatches",
@@ -306,3 +337,44 @@ class MetricsExporter:
             versions_behind: Number of versions behind current
         """
         deltalake_cdf_lag_versions.labels(table_path=table_path).set(versions_behind)
+
+    def record_iceberg_incremental_read(
+        self, table_identifier: str, rows_processed: int, duration: float
+    ) -> None:
+        """
+        Record Iceberg incremental read processing.
+
+        Args:
+            table_identifier: Iceberg table identifier
+            rows_processed: Number of rows processed
+            duration: Processing duration in seconds
+        """
+        iceberg_incremental_rows_processed.labels(
+            table_identifier=table_identifier
+        ).inc(rows_processed)
+        iceberg_incremental_batch_size.observe(rows_processed)
+        iceberg_snapshot_processing_duration.observe(duration)
+
+    def update_iceberg_snapshot_id(self, table_identifier: str, snapshot_id: int) -> None:
+        """
+        Update Iceberg current snapshot ID metric.
+
+        Args:
+            table_identifier: Iceberg table identifier
+            snapshot_id: Current snapshot ID
+        """
+        iceberg_snapshot_id.labels(table_identifier=table_identifier).set(snapshot_id)
+
+    def update_iceberg_snapshots_lag(
+        self, table_identifier: str, snapshots_behind: int
+    ) -> None:
+        """
+        Update Iceberg snapshot processing lag.
+
+        Args:
+            table_identifier: Iceberg table identifier
+            snapshots_behind: Number of snapshots behind current
+        """
+        iceberg_snapshots_lag.labels(table_identifier=table_identifier).set(
+            snapshots_behind
+        )
