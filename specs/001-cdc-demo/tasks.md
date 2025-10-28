@@ -247,7 +247,7 @@
 
 ### Documentation for User Story 4
 
-- [ ] T117 [P] [US4] Create Iceberg CDC pipeline README in docs/pipelines/iceberg.md
+- [X] T117 [P] [US4] Create Iceberg CDC pipeline README in docs/pipelines/iceberg.md
 - [X] T118 [P] [US4] Add Iceberg CDC architecture diagram in docs/architecture.md
 
 **Checkpoint**: User Stories 1, 2, 3, AND 4 should all work independently
@@ -273,18 +273,18 @@
 
 ### Implementation for User Story 5
 
-- [ ] T125 [P] [US5] Create data transformation module (name concatenation, location derivation) in src/cdc_pipelines/cross_storage/transformations.py
-- [ ] T126 [P] [US5] Create Kafka consumer for Debezium events in src/cdc_pipelines/cross_storage/kafka_consumer.py
-- [ ] T127 [US5] Create Spark structured streaming job for Kafka→Iceberg in src/cdc_pipelines/cross_storage/spark_job.py (depends on T125, T126)
-- [ ] T128 [US5] Implement cross-storage pipeline orchestrator in src/cdc_pipelines/cross_storage/pipeline.py (depends on T125-T127)
-- [ ] T129 [US5] Add cross-storage CDC metrics export in src/observability/metrics.py
-- [ ] T130 [US5] Add cross-storage CDC health check in src/observability/health.py
-- [ ] T131 [P] [US5] Create Spark job submission script in scripts/submit-spark-job.sh
+- [X] T125 [P] [US5] Create data transformation module (name concatenation, location derivation) in src/cdc_pipelines/cross_storage/transformations.py
+- [X] T126 [P] [US5] Create Kafka consumer for Debezium events in src/cdc_pipelines/cross_storage/kafka_consumer.py
+- [X] T127 [US5] Create Spark structured streaming job for Kafka→Iceberg in src/cdc_pipelines/cross_storage/spark_job.py (depends on T125, T126)
+- [X] T128 [US5] Implement cross-storage pipeline orchestrator in src/cdc_pipelines/cross_storage/pipeline.py (depends on T125-T127)
+- [X] T129 [US5] Add cross-storage CDC metrics export in src/observability/metrics.py
+- [X] T130 [US5] Add cross-storage CDC health check in src/observability/health.py
+- [X] T131 [P] [US5] Create Spark job submission script in scripts/submit-spark-job.sh
 
 ### Documentation for User Story 5
 
-- [ ] T132 [P] [US5] Create cross-storage CDC pipeline README in docs/pipelines/cross_storage.md
-- [ ] T133 [P] [US5] Add cross-storage architecture diagram in docs/architecture.md
+- [X] T132 [P] [US5] Create cross-storage CDC pipeline README in docs/pipelines/cross_storage.md
+- [X] T133 [P] [US5] Add cross-storage architecture diagram in docs/architecture.md
 
 **Checkpoint**: All user stories should now be independently functional
 
