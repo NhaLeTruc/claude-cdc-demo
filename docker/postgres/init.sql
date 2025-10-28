@@ -78,10 +78,11 @@ CREATE TRIGGER update_products_updated_at BEFORE UPDATE ON products
     FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
 
 -- Grant necessary permissions for CDC user
-ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT SELECT ON TABLES TO ${POSTGRES_USER};
-GRANT USAGE ON SCHEMA public TO ${POSTGRES_USER};
-GRANT SELECT ON ALL TABLES IN SCHEMA public TO ${POSTGRES_USER};
-GRANT SELECT ON ALL SEQUENCES IN SCHEMA public TO ${POSTGRES_USER};
+-- Note: Using CURRENT_USER since this runs as the database owner
+ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT SELECT ON TABLES TO CURRENT_USER;
+GRANT USAGE ON SCHEMA public TO PUBLIC;
+GRANT SELECT ON ALL TABLES IN SCHEMA public TO PUBLIC;
+GRANT SELECT ON ALL SEQUENCES IN SCHEMA public TO PUBLIC;
 
 -- Create replication slot for Debezium (will be created by Debezium connector)
 -- SELECT pg_create_logical_replication_slot('debezium_slot', 'pgoutput');
