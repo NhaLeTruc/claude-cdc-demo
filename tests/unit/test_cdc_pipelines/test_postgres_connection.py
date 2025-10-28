@@ -7,10 +7,15 @@ from unittest.mock import Mock, patch, MagicMock
 @pytest.fixture
 def mock_pg_connection():
     """Mock PostgreSQL connection."""
-    with patch("psycopg2.connect") as mock_connect:
+    with patch("src.cdc_pipelines.postgres.connection.psycopg2.connect") as mock_connect:
         mock_conn = MagicMock()
         mock_cursor = MagicMock()
-        mock_conn.cursor.return_value = mock_cursor
+        mock_cursor.description = [("column1",), ("column2",)]  # Simulate result columns
+        mock_cursor.__enter__ = Mock(return_value=mock_cursor)
+        mock_cursor.__exit__ = Mock(return_value=False)
+        mock_conn.cursor.return_value.__enter__ = Mock(return_value=mock_cursor)
+        mock_conn.cursor.return_value.__exit__ = Mock(return_value=False)
+        mock_conn.closed = 0  # psycopg2 uses 0 for open, non-zero for closed
         mock_connect.return_value = mock_conn
         yield mock_conn
 
