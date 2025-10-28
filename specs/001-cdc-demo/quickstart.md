@@ -1,8 +1,9 @@
 # Quickstart Guide: CDC Demo for Open-Source Data Storage
 
-**Last Updated**: 2025-10-27
+**Last Updated**: 2025-10-28
 **Estimated Time**: 10 minutes
-**Prerequisites**: Docker Desktop installed and running
+**Prerequisites**: Docker Desktop 20.10+ installed and running
+**Validated On**: Clean Ubuntu 22.04, macOS 13+, Windows 11 with WSL2
 
 ## What You'll Learn
 
