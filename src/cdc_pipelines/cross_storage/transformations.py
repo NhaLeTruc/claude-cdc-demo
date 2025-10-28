@@ -30,9 +30,8 @@ class DataTransformer:
 
     def __init__(self):
         """Initialize DataTransformer"""
-        if not PYARROW_AVAILABLE:
-            raise ImportError("PyArrow is required for data transformations")
-
+        # Note: PyArrow check removed to allow imports without PyArrow installed
+        # PyArrow is only required when transform_batch() is called
         logger.info("Initialized DataTransformer")
 
     def transform_customer_data(
@@ -162,7 +161,7 @@ class DataTransformer:
 
     def transform_batch(
         self, cdc_events: List[Dict[str, Any]]
-    ) -> pa.Table:
+    ) -> "pa.Table":
         """
         Transform a batch of CDC events to PyArrow Table.
 
@@ -172,6 +171,9 @@ class DataTransformer:
         Returns:
             PyArrow Table with transformed data
         """
+        if not PYARROW_AVAILABLE:
+            raise ImportError("PyArrow is required for batch transformations")
+
         transformed_records = []
 
         for event in cdc_events:
@@ -202,9 +204,9 @@ class DataTransformer:
 
     def enrich_with_aggregates(
         self,
-        customer_data: pa.Table,
-        orders_data: Optional[pa.Table] = None
-    ) -> pa.Table:
+        customer_data: "pa.Table",
+        orders_data: Optional["pa.Table"] = None
+    ) -> "pa.Table":
         """
         Enrich customer data with aggregated metrics.
 
@@ -369,3 +371,103 @@ class DataTransformer:
         except Exception as e:
             logger.error(f"Schema validation failed: {e}")
             return False
+
+
+# ============================================================================
+# Standalone helper functions for testing
+# ============================================================================
+
+def concatenate_name(first_name: Optional[str], last_name: Optional[str]) -> str:
+    """
+    Concatenate first and last name.
+
+    Args:
+        first_name: First name
+        last_name: Last name
+
+    Returns:
+        Concatenated full name
+    """
+    if first_name and last_name:
+        return f"{first_name} {last_name}"
+    elif first_name:
+        return first_name
+    elif last_name:
+        return last_name
+    else:
+        return ""
+
+
+def derive_location(
+    city: Optional[str],
+    state: Optional[str],
+    country: Optional[str]
+) -> str:
+    """
+    Derive location string from components.
+
+    Args:
+        city: City name
+        state: State/province
+        country: Country name
+
+    Returns:
+        Formatted location string
+    """
+    parts = []
+
+    if city:
+        parts.append(city)
+    if state:
+        parts.append(state)
+    if country:
+        parts.append(country)
+
+    return ", ".join(parts) if parts else ""
+
+
+def transform_customer(customer_data: Dict[str, Any]) -> Dict[str, Any]:
+    """
+    Transform customer data to analytics format.
+
+    Args:
+        customer_data: Raw customer data
+
+    Returns:
+        Transformed customer record
+    """
+    return {
+        "customer_id": customer_data.get("customer_id"),
+        "email": customer_data.get("email"),
+        "full_name": concatenate_name(
+            customer_data.get("first_name"),
+            customer_data.get("last_name")
+        ),
+        "location": derive_location(
+            customer_data.get("city"),
+            customer_data.get("state"),
+            customer_data.get("country")
+        ),
+        "customer_tier": customer_data.get("customer_tier"),
+        "lifetime_value": customer_data.get("lifetime_value", 0.0),
+        "registration_date": customer_data.get("registration_date"),
+        "is_active": customer_data.get("is_active", True),
+    }
+
+
+def extract_debezium_payload(cdc_event: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+    """
+    Extract payload from Debezium CDC event.
+
+    Args:
+        cdc_event: Debezium CDC event
+
+    Returns:
+        Extracted payload or None
+    """
+    operation = cdc_event.get("op", "u")
+
+    if operation == "d":
+        return cdc_event.get("before")
+    else:
+        return cdc_event.get("after")
