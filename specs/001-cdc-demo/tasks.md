@@ -189,13 +189,13 @@
 
 > **CONSTITUTION REQUIREMENT: Write these tests FIRST, ensure they FAIL before implementation (TDD)**
 
-- [ ] T086 [P] [US3] Unit test for DeltaLake CDF configuration in tests/unit/test_cdc_pipelines/test_delta_cdf_config.py
-- [ ] T087 [P] [US3] Unit test for Delta table version manager in tests/unit/test_cdc_pipelines/test_delta_versions.py
-- [ ] T088 [P] [US3] Integration test for DeltaLake CDF (version-to-version changes) in tests/integration/test_deltalake_cdc.py
-- [ ] T089 [P] [US3] Integration test for DeltaLake CDF (time range query) in tests/integration/test_deltalake_cdc.py
-- [ ] T090 [P] [US3] Integration test for DeltaLake CDF (operation type detection) in tests/integration/test_deltalake_cdc.py
-- [ ] T091 [P] [US3] Data quality test for Delta CDF data integrity in tests/data_quality/test_integrity.py
-- [ ] T092 [P] [US3] End-to-end test for Delta CDF workflow in tests/e2e/test_delta_cdf_workflow.py
+- [X] T086 [P] [US3] Unit test for DeltaLake CDF configuration in tests/unit/test_cdc_pipelines/test_delta_cdf_config.py
+- [X] T087 [P] [US3] Unit test for Delta table version manager in tests/unit/test_cdc_pipelines/test_delta_versions.py
+- [X] T088 [P] [US3] Integration test for DeltaLake CDF (version-to-version changes) in tests/integration/test_deltalake_cdc.py
+- [X] T089 [P] [US3] Integration test for DeltaLake CDF (time range query) in tests/integration/test_deltalake_cdc.py
+- [X] T090 [P] [US3] Integration test for DeltaLake CDF (operation type detection) in tests/integration/test_deltalake_cdc.py
+- [X] T091 [P] [US3] Data quality test for Delta CDF data integrity in tests/data_quality/test_integrity.py
+- [X] T092 [P] [US3] End-to-end test for Delta CDF workflow in tests/e2e/test_delta_cdf_workflow.py
 
 ### Implementation for User Story 3
 
@@ -226,14 +226,14 @@
 
 > **CONSTITUTION REQUIREMENT: Write these tests FIRST, ensure they FAIL before implementation (TDD)**
 
-- [ ] T102 [P] [US4] Unit test for Iceberg table manager in tests/unit/test_cdc_pipelines/test_iceberg_manager.py
-- [ ] T103 [P] [US4] Unit test for Iceberg snapshot tracker in tests/unit/test_cdc_pipelines/test_iceberg_snapshots.py
-- [ ] T104 [P] [US4] Unit test for incremental read logic in tests/unit/test_cdc_pipelines/test_iceberg_incremental.py
-- [ ] T105 [P] [US4] Integration test for Iceberg incremental read (snapshot-to-snapshot) in tests/integration/test_iceberg_cdc.py
-- [ ] T106 [P] [US4] Integration test for Iceberg partition evolution handling in tests/integration/test_iceberg_cdc.py
-- [ ] T107 [P] [US4] Integration test for Iceberg mixed operations (insert/update/delete) in tests/integration/test_iceberg_cdc.py
-- [ ] T108 [P] [US4] Data quality test for Iceberg data integrity in tests/data_quality/test_integrity.py
-- [ ] T109 [P] [US4] End-to-end test for Iceberg incremental workflow in tests/e2e/test_iceberg_workflow.py
+- [X] T102 [P] [US4] Unit test for Iceberg table manager in tests/unit/test_cdc_pipelines/test_iceberg_manager.py
+- [X] T103 [P] [US4] Unit test for Iceberg snapshot tracker in tests/unit/test_cdc_pipelines/test_iceberg_snapshots.py
+- [X] T104 [P] [US4] Unit test for incremental read logic in tests/unit/test_cdc_pipelines/test_iceberg_incremental.py
+- [X] T105 [P] [US4] Integration test for Iceberg incremental read (snapshot-to-snapshot) in tests/integration/test_iceberg_cdc.py
+- [X] T106 [P] [US4] Integration test for Iceberg partition evolution handling in tests/integration/test_iceberg_cdc.py
+- [X] T107 [P] [US4] Integration test for Iceberg mixed operations (insert/update/delete) in tests/integration/test_iceberg_cdc.py
+- [X] T108 [P] [US4] Data quality test for Iceberg data integrity in tests/data_quality/test_integrity.py
+- [X] T109 [P] [US4] End-to-end test for Iceberg incremental workflow in tests/e2e/test_iceberg_workflow.py
 
 ### Implementation for User Story 4
 
@@ -264,12 +264,12 @@
 
 > **CONSTITUTION REQUIREMENT: Write these tests FIRST, ensure they FAIL before implementation (TDD)**
 
-- [ ] T119 [P] [US5] Unit test for data transformation logic in tests/unit/test_cdc_pipelines/test_transformations.py
-- [ ] T120 [P] [US5] Unit test for Spark-Iceberg sink in tests/unit/test_cdc_pipelines/test_spark_iceberg.py
-- [ ] T121 [P] [US5] Integration test for Postgres→Kafka→Iceberg flow in tests/integration/test_cross_storage.py
-- [ ] T122 [P] [US5] Integration test for schema drift handling in tests/integration/test_cross_storage.py
-- [ ] T123 [P] [US5] Data quality test for cross-storage data integrity in tests/data_quality/test_integrity.py
-- [ ] T124 [P] [US5] End-to-end test for Postgres→Iceberg pipeline in tests/e2e/test_postgres_to_iceberg.py
+- [X] T119 [P] [US5] Unit test for data transformation logic in tests/unit/test_cdc_pipelines/test_transformations.py
+- [X] T120 [P] [US5] Unit test for Spark-Iceberg sink in tests/unit/test_cdc_pipelines/test_spark_iceberg.py
+- [X] T121 [P] [US5] Integration test for Postgres→Kafka→Iceberg flow in tests/integration/test_cross_storage.py
+- [X] T122 [P] [US5] Integration test for schema drift handling in tests/integration/test_cross_storage.py
+- [X] T123 [P] [US5] Data quality test for cross-storage data integrity in tests/data_quality/test_integrity.py
+- [X] T124 [P] [US5] End-to-end test for Postgres→Iceberg pipeline in tests/e2e/test_postgres_to_iceberg.py
 
 ### Implementation for User Story 5
 
