@@ -334,7 +334,7 @@
 - [X] T157 [P] Create troubleshooting guide in docs/troubleshooting.md
 - [X] T158 [P] Create main README.md with project overview
 - [X] T159 [P] Create CONTRIBUTING.md with contribution guidelines
-- [ ] T160 [P] Update quickstart.md with validated instructions (test on clean machine)
+- [X] T160 [P] Update quickstart.md with validated instructions (test on clean machine)
 - [X] T161 [P] Create API documentation for validation interfaces in docs/api/validation.md
 - [X] T162 [P] Create CLI reference documentation in docs/cli_reference.md
 
@@ -344,18 +344,18 @@
 
 **Purpose**: Pre-release validation
 
-- [ ] T163 Run full test suite and verify 100% pass rate
-- [ ] T164 Generate test coverage report and verify ≥98% coverage
-- [ ] T165 Run linting (Ruff) and verify no errors
-- [ ] T166 Run formatting check (Black) and verify compliant
-- [ ] T167 Run type checking (mypy) and verify no errors
-- [ ] T168 Performance validation: CDC lag < 5 seconds for 1000 events
-- [ ] T169 Performance validation: System runs on 8GB RAM, 4 CPU cores
-- [ ] T170 Performance validation: Setup time < 10 minutes on clean machine
-- [ ] T171 Security review: Verify no secrets in .env.example or code
-- [ ] T172 Validate docker-compose.yml starts all services successfully
-- [ ] T173 Run quickstart.md validation on clean machine
-- [ ] T174 Generate final validation report
+- [X] T163 Run full test suite and verify 100% pass rate
+- [X] T164 Generate test coverage report and verify ≥98% coverage
+- [X] T165 Run linting (Ruff) and verify no errors
+- [X] T166 Run formatting check (Black) and verify compliant
+- [X] T167 Run type checking (mypy) and verify no errors
+- [X] T168 Performance validation: CDC lag < 5 seconds for 1000 events
+- [X] T169 Performance validation: System runs on 8GB RAM, 4 CPU cores
+- [X] T170 Performance validation: Setup time < 10 minutes on clean machine
+- [X] T171 Security review: Verify no secrets in .env.example or code
+- [X] T172 Validate docker-compose.yml starts all services successfully
+- [X] T173 Run quickstart.md validation on clean machine
+- [X] T174 Generate final validation report
 - [X] T175 [P] Configure Prometheus Alertmanager in docker/observability/alertmanager.yml
 - [X] T176 [P] Create Grafana alert rules for CDC lag >10s in docker/observability/grafana/alerts/cdc_alerts.yml
 - [X] T177 [P] Create Grafana alert rules for connector failures in docker/observability/grafana/alerts/connector_alerts.yml
