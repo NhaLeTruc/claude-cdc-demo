@@ -151,28 +151,140 @@ graph LR
 
 ## DeltaLake CDF Pipeline (User Story 3)
 
+### Component Architecture
+
 ```mermaid
 graph TB
-    subgraph "DeltaLake Table"
-        V0[Version 0]
+    subgraph "DeltaLake Table Storage"
+        V0[Version 0<br/>Initial State]
+        V1[Version 1<br/>+100 rows]
+        V2[Version 2<br/>Updated rows]
+        V3[Version 3<br/>-50 rows]
+
+        PARQUET[Parquet Files<br/>Data Layer]
+        TXLOG[Transaction Log<br/>_delta_log/]
+        CDF_FILES[CDF Files<br/>_change_data/]
+    end
+
+    subgraph "CDC Pipeline Components"
+        TM[Table Manager<br/>table_manager.py]
+        VT[Version Tracker<br/>version_tracker.py]
+        CR[CDF Reader<br/>cdf_reader.py]
+        PO[Pipeline Orchestrator<br/>pipeline.py]
+    end
+
+    subgraph "Change Processing"
+        FILTER[Change Filter<br/>by type/version]
+        STATS[Statistics<br/>Aggregator]
+        PROCESSOR[Custom Processor<br/>User Logic]
+    end
+
+    subgraph "Outputs"
+        METRICS[Prometheus<br/>Metrics]
+        CHANGES[Change Events<br/>DataFrame]
+        REPORTS[Change Reports<br/>Summaries]
+    end
+
+    V0 -.->|write| V1
+    V1 -.->|write| V2
+    V2 -.->|write| V3
+
+    V1 -->|record changes| CDF_FILES
+    V2 -->|record changes| CDF_FILES
+    V3 -->|record changes| CDF_FILES
+
+    PARQUET -->|read| TM
+    TXLOG -->|track| VT
+    CDF_FILES -->|query| CR
+
+    TM -->|coordinates| PO
+    VT -->|provides versions| PO
+    CR -->|reads changes| PO
+
+    PO -->|filter| FILTER
+    PO -->|calculate| STATS
+    PO -->|execute| PROCESSOR
+
+    FILTER -->|output| CHANGES
+    STATS -->|generate| REPORTS
+    PROCESSOR -->|export| METRICS
+
+    style CDF_FILES fill:#f9f,stroke:#333,stroke-width:2px
+    style PO fill:#bbf,stroke:#333,stroke-width:2px
+    style CHANGES fill:#bfb,stroke:#333,stroke-width:2px
+```
+
+### Data Flow: Version-Based CDC
+
+```mermaid
+sequenceDiagram
+    participant App as Application
+    participant DT as Delta Table
+    participant TM as Table Manager
+    participant VT as Version Tracker
+    participant CR as CDF Reader
+    participant Pipeline as CDC Pipeline
+    participant Consumer as Consumer
+
+    App->>DT: Write data (v1)
+    DT->>DT: Create version 1
+    DT->>DT: Record changes to CDF
+    Note over DT: _change_type: insert<br/>_commit_version: 1
+
+    App->>DT: Update data (v2)
+    DT->>DT: Create version 2
+    DT->>DT: Record preimage + postimage
+    Note over DT: _change_type: update_preimage<br/>_change_type: update_postimage
+
+    Consumer->>Pipeline: Request changes since v0
+    Pipeline->>VT: Get version range
+    VT-->>Pipeline: Versions 0-2
+    Pipeline->>CR: Read CDF(v0→v2)
+    CR->>DT: Query CDF files
+    DT-->>CR: Change records
+    CR-->>Pipeline: Changes DataFrame
+    Pipeline->>Pipeline: Filter & process
+    Pipeline-->>Consumer: Change events
+    Pipeline->>TM: Update metrics
+    TM->>TM: Export to Prometheus
+```
+
+### Change Type Flow
+
+```mermaid
+graph LR
+    subgraph "Operations"
+        INSERT[INSERT<br/>Customer]
+        UPDATE[UPDATE<br/>Customer Tier]
+        DELETE[DELETE<br/>Customer]
+    end
+
+    subgraph "Delta Table Versions"
         V1[Version 1]
         V2[Version 2]
-        CDF_LOG[CDF Log]
+        V3[Version 3]
     end
 
-    subgraph "CDF Reader"
-        READER[Change Reader]
-        FILTER[Change Filter]
+    subgraph "CDF Change Records"
+        C1[_change_type: insert<br/>after: {id:1, tier:Gold}]
+        C2A[_change_type: update_preimage<br/>before: {id:1, tier:Gold}]
+        C2B[_change_type: update_postimage<br/>after: {id:1, tier:Platinum}]
+        C3[_change_type: delete<br/>before: {id:1, tier:Platinum}]
     end
 
-    V0 -.->|upgrade| V1
-    V1 -.->|upgrade| V2
-    V1 -->|record| CDF_LOG
-    V2 -->|record| CDF_LOG
+    INSERT -->|creates| V1
+    UPDATE -->|creates| V2
+    DELETE -->|creates| V3
 
-    CDF_LOG -->|query| READER
-    READER -->|filter| FILTER
-    FILTER -->|changes| OUTPUT[Change Stream]
+    V1 -->|records| C1
+    V2 -->|records| C2A
+    V2 -->|records| C2B
+    V3 -->|records| C3
+
+    style C1 fill:#bfb,stroke:#333
+    style C2A fill:#fbb,stroke:#333
+    style C2B fill:#bfb,stroke:#333
+    style C3 fill:#fbb,stroke:#333
 ```
 
 ## Iceberg CDC Pipeline (User Story 4)
