@@ -17,6 +17,7 @@ pymysql = "^1.1.0"
 pyspark = "^3.4.0"
 delta-spark = "^2.4.0"
 pyiceberg = "^0.5.0"
+pyarrow = "^14.0.0"
 # Data Generation
 faker = "^20.0.0"
 # CLI
@@ -31,13 +32,14 @@ python-dotenv = "^1.0.0"
 # Utilities
 httpx = "^0.25.2"
 pyyaml = "^6.0.1"
+numpy = "<2"
 
 [tool.poetry.group.dev.dependencies]
 # Testing
 pytest = "^7.4.3"
 pytest-cov = "^4.1.0"
 pytest-asyncio = "^0.21.1"
-pytest-docker-compose = "^3.2.1"
+# pytest-docker-compose = "^3.2.1"  # Removed due to dependency conflicts with python-dotenv and PyYAML
 testcontainers = "^3.7.1"
 # Code Quality
 black = "^23.12.0"
