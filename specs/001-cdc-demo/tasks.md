@@ -237,18 +237,18 @@
 
 ### Implementation for User Story 4
 
-- [ ] T110 [P] [US4] Create Iceberg table manager with PyIceberg in src/cdc_pipelines/iceberg/table_manager.py
-- [ ] T111 [P] [US4] Create Iceberg snapshot tracker in src/cdc_pipelines/iceberg/snapshot_tracker.py
-- [ ] T112 [US4] Create Iceberg incremental read interface in src/cdc_pipelines/iceberg/incremental_reader.py (depends on T110, T111)
-- [ ] T113 [US4] Implement Iceberg CDC pipeline orchestrator in src/cdc_pipelines/iceberg/pipeline.py (depends on T110-T112)
-- [ ] T114 [US4] Add Iceberg CDC metrics export in src/observability/metrics.py
+- [X] T110 [P] [US4] Create Iceberg table manager with PyIceberg in src/cdc_pipelines/iceberg/table_manager.py
+- [X] T111 [P] [US4] Create Iceberg snapshot tracker in src/cdc_pipelines/iceberg/snapshot_tracker.py
+- [X] T112 [US4] Create Iceberg incremental read interface in src/cdc_pipelines/iceberg/incremental_reader.py (depends on T110, T111)
+- [X] T113 [US4] Implement Iceberg CDC pipeline orchestrator in src/cdc_pipelines/iceberg/pipeline.py (depends on T110-T112)
+- [X] T114 [US4] Add Iceberg CDC metrics export in src/observability/metrics.py
 - [X] T115 [P] [US4] Create Iceberg table initialization script in scripts/init-iceberg-tables.sh
-- [ ] T116 [P] [US4] Create sample Iceberg CDC demo script in scripts/demo-iceberg-snapshots.sh
+- [X] T116 [P] [US4] Create sample Iceberg CDC demo script in scripts/demo-iceberg-snapshots.sh
 
 ### Documentation for User Story 4
 
 - [ ] T117 [P] [US4] Create Iceberg CDC pipeline README in docs/pipelines/iceberg.md
-- [ ] T118 [P] [US4] Add Iceberg CDC architecture diagram in docs/architecture.md
+- [X] T118 [P] [US4] Add Iceberg CDC architecture diagram in docs/architecture.md
 
 **Checkpoint**: User Stories 1, 2, 3, AND 4 should all work independently
 
