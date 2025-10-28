@@ -120,7 +120,8 @@ class MySQLConnectionManager:
         cursor = conn.cursor(dictionary=True)
         try:
             cursor.execute(query, params)
-            if fetch:
+            # Check if query returns results (SELECT, SHOW, etc.)
+            if fetch and cursor.description:
                 return cursor.fetchall()  # type: ignore
             conn.commit()
             return None
