@@ -294,8 +294,8 @@
 
 **Purpose**: Validate all CDC pipelines handle schema evolution correctly
 
-- [ ] T134 [P] Create schema evolution test table in docker/postgres/init.sql
-- [ ] T135 [P] Unit test for schema evolution detection in tests/unit/test_cdc_pipelines/test_schema_detection.py
+- [X] T134 [P] Create schema evolution test table in docker/postgres/init.sql
+- [X] T135 [P] Unit test for schema evolution detection in tests/unit/test_cdc_pipelines/test_schema_detection.py
 - [ ] T136 [P] Data quality test for ADD COLUMN scenario in tests/data_quality/test_schema_evolution.py
 - [ ] T137 [P] Data quality test for DROP COLUMN scenario in tests/data_quality/test_schema_evolution.py
 - [ ] T138 [P] Data quality test for TYPE CHANGE scenario in tests/data_quality/test_schema_evolution.py
