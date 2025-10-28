@@ -289,28 +289,158 @@ graph LR
 
 ## Iceberg CDC Pipeline (User Story 4)
 
+### Component Architecture
+
 ```mermaid
 graph TB
-    subgraph "Iceberg Table"
-        S0[Snapshot 0]
-        S1[Snapshot 1]
-        S2[Snapshot 2]
-        META[Metadata]
+    subgraph "Iceberg Table Storage"
+        S0[Snapshot 0<br/>Initial State]
+        S1[Snapshot 1<br/>+1000 rows]
+        S2[Snapshot 2<br/>+500 rows]
+        S3[Snapshot 3<br/>Compaction]
+
+        PARQUET[Parquet Data Files<br/>Immutable]
+        METADATA[Metadata JSON<br/>version-hint.text]
+        MANIFEST[Manifest Lists<br/>Snapshot Index]
     end
 
-    subgraph "Incremental Reader"
-        TRACKER[Snapshot Tracker]
-        DIFF[Diff Calculator]
+    subgraph "CDC Pipeline Components"
+        TM[Table Manager<br/>table_manager.py]
+        ST[Snapshot Tracker<br/>snapshot_tracker.py]
+        IR[Incremental Reader<br/>incremental_reader.py]
+        PO[Pipeline Orchestrator<br/>pipeline.py]
     end
 
-    S0 -.->|commit| S1
-    S1 -.->|commit| S2
-    S1 -->|metadata| META
-    S2 -->|metadata| META
+    subgraph "Incremental Processing"
+        SNAP_COMP[Snapshot<br/>Comparator]
+        FILE_SCAN[Manifest<br/>Scanner]
+        INCR_READ[Incremental<br/>Data Reader]
+    end
 
-    META -->|track| TRACKER
-    TRACKER -->|compare| DIFF
-    DIFF -->|changes| INC_OUT[Incremental Data]
+    subgraph "Outputs"
+        METRICS[Prometheus<br/>Metrics]
+        ARROW_DATA[PyArrow Table<br/>Incremental Data]
+        STATS[Processing<br/>Statistics]
+    end
+
+    S0 -.->|write| S1
+    S1 -.->|write| S2
+    S2 -.->|write| S3
+
+    S1 -->|points to| MANIFEST
+    S2 -->|points to| MANIFEST
+    S3 -->|points to| MANIFEST
+    MANIFEST -->|references| PARQUET
+    METADATA -->|tracks| S3
+
+    PARQUET -->|read| TM
+    METADATA -->|load| TM
+    MANIFEST -->|track| ST
+    ST -->|analyze| IR
+
+    TM -->|coordinates| PO
+    ST -->|provides snapshots| PO
+    IR -->|reads data| PO
+
+    PO -->|compare| SNAP_COMP
+    PO -->|scan| FILE_SCAN
+    PO -->|execute| INCR_READ
+
+    SNAP_COMP -->|output| ARROW_DATA
+    FILE_SCAN -->|generate| STATS
+    INCR_READ -->|export| METRICS
+
+    style MANIFEST fill:#f9f,stroke:#333,stroke-width:2px
+    style PO fill:#bbf,stroke:#333,stroke-width:2px
+    style ARROW_DATA fill:#bfb,stroke:#333,stroke-width:2px
+```
+
+### Data Flow: Snapshot-Based Incremental Read
+
+```mermaid
+sequenceDiagram
+    participant App as Application
+    participant IT as Iceberg Table
+    participant TM as Table Manager
+    participant ST as Snapshot Tracker
+    participant IR as Incremental Reader
+    participant Pipeline as CDC Pipeline
+    participant Consumer as Consumer
+
+    App->>IT: Write data (append)
+    IT->>IT: Create Snapshot 1
+    IT->>IT: Update metadata
+    Note over IT: Snapshot 1: +1000 rows<br/>New manifest list<br/>New data files
+
+    App->>IT: Write more data
+    IT->>IT: Create Snapshot 2
+    Note over IT: Snapshot 2: +500 rows<br/>Additional data files
+
+    Consumer->>Pipeline: Request incremental since Snap 1
+    Pipeline->>ST: Get snapshot range
+    ST-->>Pipeline: Snapshots 1→2
+    Pipeline->>IR: Read incremental(S1→S2)
+    IR->>IT: Scan manifest diff
+    IT-->>IR: Changed data files
+    IR->>IT: Read only new files
+    IT-->>IR: Incremental data
+    IR-->>Pipeline: PyArrow Table
+    Pipeline->>Pipeline: Process data
+    Pipeline-->>Consumer: Incremental results
+    Pipeline->>TM: Update metrics
+    TM->>TM: Export to Prometheus
+```
+
+### Snapshot Chain and Incremental Read
+
+```mermaid
+graph LR
+    subgraph "Write Operations"
+        W1[Append<br/>1000 rows]
+        W2[Append<br/>500 rows]
+        W3[Overwrite<br/>Partition]
+    end
+
+    subgraph "Snapshot Chain"
+        S1[Snapshot 1<br/>Manifest: A]
+        S2[Snapshot 2<br/>Manifest: A+B]
+        S3[Snapshot 3<br/>Manifest: A+B+C]
+    end
+
+    subgraph "Data Files"
+        F1[file-1.parquet<br/>1000 rows]
+        F2[file-2.parquet<br/>500 rows]
+        F3[file-3.parquet<br/>200 rows]
+    end
+
+    subgraph "Incremental Reads"
+        I1["Read(S0→S1)<br/>Returns: file-1"]
+        I2["Read(S1→S2)<br/>Returns: file-2"]
+        I3["Read(S2→S3)<br/>Returns: file-3"]
+    end
+
+    W1 -->|creates| S1
+    W2 -->|creates| S2
+    W3 -->|creates| S3
+
+    S1 -->|references| F1
+    S2 -->|references| F1
+    S2 -->|references| F2
+    S3 -->|references| F1
+    S3 -->|references| F2
+    S3 -->|references| F3
+
+    S1 -.->|identifies new| I1
+    S2 -.->|identifies new| I2
+    S3 -.->|identifies new| I3
+
+    I1 -->|reads| F1
+    I2 -->|reads| F2
+    I3 -->|reads| F3
+
+    style I1 fill:#bfb,stroke:#333
+    style I2 fill:#bfb,stroke:#333
+    style I3 fill:#bfb,stroke:#333
 ```
 
 ## Cross-Storage CDC Pipeline (User Story 5)
