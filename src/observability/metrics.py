@@ -95,6 +95,37 @@ mysql_binlog_position = Gauge(
     ["server", "binlog_file"],
 )
 
+# DeltaLake CDC Specific Metrics
+deltalake_cdf_events_processed_total = Counter(
+    "deltalake_cdf_events_processed_total",
+    "Total DeltaLake CDF events processed",
+    ["table", "change_type"],
+)
+
+deltalake_table_version = Gauge(
+    "deltalake_table_version",
+    "Current DeltaLake table version",
+    ["table_path"],
+)
+
+deltalake_cdf_lag_versions = Gauge(
+    "deltalake_cdf_lag_versions",
+    "Number of versions behind in CDF processing",
+    ["table_path"],
+)
+
+deltalake_cdf_batch_size = Histogram(
+    "deltalake_cdf_batch_size",
+    "Size of DeltaLake CDF event batches",
+    buckets=[1, 10, 50, 100, 500, 1000, 5000, 10000],
+)
+
+deltalake_version_processing_duration = Histogram(
+    "deltalake_version_processing_duration_seconds",
+    "Time taken to process a Delta table version",
+    buckets=[0.01, 0.05, 0.1, 0.5, 1.0, 5.0, 10.0, 30.0, 60.0],
+)
+
 checksum_mismatches = Counter(
     "checksum_mismatches_total",
     "Total number of checksum mismatches",
@@ -237,3 +268,41 @@ class MetricsExporter:
             healthy: Health status
         """
         pipeline_health.labels(pipeline=pipeline).set(1 if healthy else 0)
+
+    def record_deltalake_cdf_event(
+        self, table: str, change_type: str, batch_size: int, duration: float
+    ) -> None:
+        """
+        Record DeltaLake CDF event processing.
+
+        Args:
+            table: Table name
+            change_type: Type of change (insert/update_preimage/update_postimage/delete)
+            batch_size: Number of events in batch
+            duration: Processing duration in seconds
+        """
+        deltalake_cdf_events_processed_total.labels(
+            table=table, change_type=change_type
+        ).inc(batch_size)
+        deltalake_cdf_batch_size.observe(batch_size)
+        deltalake_version_processing_duration.observe(duration)
+
+    def update_deltalake_version(self, table_path: str, version: int) -> None:
+        """
+        Update DeltaLake table version metric.
+
+        Args:
+            table_path: Path to Delta table
+            version: Current version number
+        """
+        deltalake_table_version.labels(table_path=table_path).set(version)
+
+    def update_deltalake_cdf_lag(self, table_path: str, versions_behind: int) -> None:
+        """
+        Update DeltaLake CDF processing lag.
+
+        Args:
+            table_path: Path to Delta table
+            versions_behind: Number of versions behind current
+        """
+        deltalake_cdf_lag_versions.labels(table_path=table_path).set(versions_behind)
