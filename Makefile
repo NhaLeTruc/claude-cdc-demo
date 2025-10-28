@@ -15,32 +15,32 @@ install: ## Install Python dependencies
 
 start: ## Start all services via docker-compose
 	@echo "Starting CDC demo services..."
-	@docker-compose up -d
+	@docker compose up -d
 	@echo "Waiting for services to be healthy..."
 	@sleep 10
-	@docker-compose ps
+	@docker compose ps
 
 stop: ## Stop all services
 	@echo "Stopping CDC demo services..."
-	@docker-compose down
+	@docker compose down
 
 restart: ## Restart all services
 	@make stop
 	@make start
 
 status: ## Show status of all services
-	@docker-compose ps
+	@docker compose ps
 
 logs: ## Show logs from all services (use SERVICE=<name> for specific service)
 ifdef SERVICE
-	@docker-compose logs -f $(SERVICE)
+	@docker compose logs -f $(SERVICE)
 else
-	@docker-compose logs -f
+	@docker compose logs -f
 endif
 
 clean: ## Stop services and remove volumes
 	@echo "Cleaning up CDC demo..."
-	@docker-compose down -v
+	@docker compose down -v
 	@rm -rf .pytest_cache .coverage htmlcov
 	@find . -type d -name "__pycache__" -exec rm -rf {} + 2>/dev/null || true
 	@echo "Cleanup complete"
@@ -82,7 +82,7 @@ type-check: ## Run type checker (mypy)
 quality: lint type-check format-check ## Run all code quality checks
 
 build: ## Build Docker images
-	@docker-compose build
+	@docker compose build
 
 quickstart: setup build start ## One-command quickstart (setup + build + start)
 	@echo "CDC demo is ready!"
