@@ -445,26 +445,283 @@ graph LR
 
 ## Cross-Storage CDC Pipeline (User Story 5)
 
+### End-to-End Architecture: Postgres → Iceberg
+
 ```mermaid
-graph LR
-    subgraph "Source"
-        PG2[PostgreSQL]
+graph TB
+    subgraph "Source (OLTP)"
+        PG[(PostgreSQL<br/>customers)]
+        WAL[Write-Ahead Log]
     end
 
-    subgraph "Transformation"
-        KAFKA2[Kafka]
-        SPARK[Spark Streaming]
-        TRANSFORM[Transformations]
+    subgraph "CDC Capture"
+        DBZ[Debezium<br/>Postgres Connector]
+    end
+
+    subgraph "Message Streaming"
+        KAFKA[(Apache Kafka<br/>postgres.public.customers)]
+    end
+
+    subgraph "Python Processing"
+        CONSUMER[Kafka Consumer<br/>kafka_consumer.py]
+        TRANSFORMER[Data Transformer<br/>transformations.py]
+        ORCHESTRATOR[Pipeline Orchestrator<br/>pipeline.py]
+    end
+
+    subgraph "Spark Streaming"
+        SPARK_READ[Spark Kafka Source]
+        SPARK_TRANS[Spark Transformations]
+        SPARK_WRITE[Spark Iceberg Sink]
+    end
+
+    subgraph "Destination (Lakehouse)"
+        ICE[(Apache Iceberg<br/>customers_analytics)]
+        MANIFESTS[Manifest Files]
+        PARQUET2[Parquet Data]
+    end
+
+    subgraph "Observability"
+        METRICS2[Prometheus Metrics]
+    end
+
+    PG -->|Changes| WAL
+    WAL -->|Logical Decode| DBZ
+    DBZ -->|CDC Events| KAFKA
+    KAFKA -->|Poll| CONSUMER
+    KAFKA -.->|Stream| SPARK_READ
+
+    CONSUMER -->|Parse| TRANSFORMER
+    TRANSFORMER -->|Transform| ORCHESTRATOR
+    ORCHESTRATOR -->|Write| ICE
+
+    SPARK_READ -->|Parse| SPARK_TRANS
+    SPARK_TRANS -->|Apply| SPARK_WRITE
+    SPARK_WRITE -->|Commit| ICE
+
+    ICE -->|Update| MANIFESTS
+    MANIFESTS -->|Reference| PARQUET2
+
+    ORCHESTRATOR -.->|Export| METRICS2
+    SPARK_WRITE -.->|Export| METRICS2
+
+    style PG fill:#f9f,stroke:#333,stroke-width:2px
+    style KAFKA fill:#fc9,stroke:#333,stroke-width:2px
+    style TRANSFORMER fill:#9cf,stroke:#333,stroke-width:2px
+    style ICE fill:#bfb,stroke:#333,stroke-width:2px
+```
+
+### Component Architecture
+
+```mermaid
+graph LR
+    subgraph "Kafka Consumer Module"
+        KC[DebeziumKafkaConsumer]
+        KC_CONFIG[KafkaConfig]
+        KC_OFFSET[Offset Manager]
+        KC_PARSER[Event Parser]
+    end
+
+    subgraph "Transformation Module"
+        DT[DataTransformer]
+        DT_NAME[Name Concatenation]
+        DT_LOC[Location Derivation]
+        DT_VALID[Business Rules]
+        DT_META[Metadata Enrichment]
+    end
+
+    subgraph "Pipeline Orchestrator"
+        PO2[CrossStorageCDCPipeline]
+        PO_BATCH[Batch Processor]
+        PO_ERROR[Error Handler]
+        PO_METRICS[Metrics Exporter]
+    end
+
+    subgraph "Iceberg Writer"
+        IW[IcebergTableManager]
+        IW_SCHEMA[Schema Manager]
+        IW_WRITER[PyArrow Writer]
+        IW_COMMIT[Transaction Commit]
+    end
+
+    KC_CONFIG -->|Configure| KC
+    KC -->|Manage| KC_OFFSET
+    KC -->|Parse| KC_PARSER
+    KC_PARSER -->|Events| DT
+
+    DT -->|Apply| DT_NAME
+    DT -->|Apply| DT_LOC
+    DT -->|Validate| DT_VALID
+    DT -->|Enrich| DT_META
+    DT_META -->|Transformed Data| PO2
+
+    PO2 -->|Coordinate| PO_BATCH
+    PO2 -->|Handle| PO_ERROR
+    PO2 -->|Export| PO_METRICS
+    PO_BATCH -->|Write| IW
+
+    IW -->|Manage| IW_SCHEMA
+    IW -->|Convert| IW_WRITER
+    IW -->|Execute| IW_COMMIT
+
+    style KC fill:#fc9,stroke:#333,stroke-width:2px
+    style DT fill:#9cf,stroke:#333,stroke-width:2px
+    style PO2 fill:#bbf,stroke:#333,stroke-width:2px
+    style IW fill:#bfb,stroke:#333,stroke-width:2px
+```
+
+### Data Transformation Flow
+
+```mermaid
+graph TB
+    subgraph "Input: Debezium CDC Event"
+        INPUT["{\n  op: 'c',\n  after: {\n    customer_id: 12345,\n    first_name: 'Alice',\n    last_name: 'Johnson',\n    city: 'Seattle',\n    state: 'WA',\n    country: 'USA',\n    ...\n  }\n}"]
+    end
+
+    subgraph "Transformation Layer"
+        T1[Concatenate Name<br/>first_name + last_name]
+        T2[Derive Location<br/>city, state, country]
+        T3[Map Operation<br/>c → INSERT]
+        T4[Add Metadata<br/>timestamps, source]
+        T5[Apply Business Rules<br/>validate, filter]
+    end
+
+    subgraph "Output: Analytics Record"
+        OUTPUT["{\n  customer_id: 12345,\n  email: 'alice@example.com',\n  full_name: 'Alice Johnson',\n  location: 'Seattle, WA, USA',\n  _cdc_operation: 'INSERT',\n  _ingestion_timestamp: '2025-10-28T...',\n  _source_system: 'postgres_cdc',\n  ...\n}"]
+    end
+
+    INPUT -->|Extract after| T1
+    T1 -->|full_name| T2
+    T2 -->|location| T3
+    T3 -->|operation| T4
+    T4 -->|metadata| T5
+    T5 -->|validated| OUTPUT
+
+    style INPUT fill:#fff,stroke:#333,stroke-width:2px
+    style T1 fill:#9cf,stroke:#333,stroke-width:2px
+    style T2 fill:#9cf,stroke:#333,stroke-width:2px
+    style T3 fill:#9cf,stroke:#333,stroke-width:2px
+    style T4 fill:#9cf,stroke:#333,stroke-width:2px
+    style T5 fill:#fc9,stroke:#333,stroke-width:2px
+    style OUTPUT fill:#bfb,stroke:#333,stroke-width:2px
+```
+
+### Spark Structured Streaming Architecture
+
+```mermaid
+graph TB
+    subgraph "Spark Application"
+        SPARK_SESSION[SparkSession<br/>with Iceberg Extensions]
+    end
+
+    subgraph "Kafka Source"
+        KAFKA_READ[readStream<br/>format: kafka]
+        KAFKA_OPTS[Options:<br/>- bootstrap.servers<br/>- subscribe<br/>- startingOffsets]
+    end
+
+    subgraph "Transformation Logic"
+        PARSE[Parse JSON<br/>from_json(value)]
+        FLATTEN[Flatten Debezium<br/>before/after/op]
+        FILTER[Filter Customers<br/>source.table = 'customers']
+        TRANSFORM2[Apply Transformations<br/>concat_ws, expr]
+    end
+
+    subgraph "Iceberg Sink"
+        ICEBERG_WRITE[writeStream<br/>format: iceberg]
+        ICEBERG_OPTS[Options:<br/>- checkpointLocation<br/>- outputMode: append<br/>- trigger: 10s]
+    end
+
+    subgraph "State Management"
+        CHECKPOINT[Checkpoint Directory<br/>Offsets + State]
     end
 
     subgraph "Destination"
-        ICE2[Apache Iceberg]
+        TABLE2[Iceberg Table<br/>iceberg.analytics.customers]
     end
 
-    PG2 -->|CDC| KAFKA2
-    KAFKA2 -->|Stream| SPARK
-    SPARK -->|Apply| TRANSFORM
-    TRANSFORM -->|Write| ICE2
+    SPARK_SESSION -->|Create| KAFKA_READ
+    KAFKA_OPTS -->|Configure| KAFKA_READ
+    KAFKA_READ -->|DataFrame| PARSE
+    PARSE -->|Parsed| FLATTEN
+    FLATTEN -->|Flattened| FILTER
+    FILTER -->|Filtered| TRANSFORM2
+    TRANSFORM2 -->|Transformed| ICEBERG_WRITE
+    ICEBERG_OPTS -->|Configure| ICEBERG_WRITE
+    ICEBERG_WRITE -->|Write| TABLE2
+    ICEBERG_WRITE -.->|Save| CHECKPOINT
+    CHECKPOINT -.->|Resume| KAFKA_READ
+
+    style SPARK_SESSION fill:#fc9,stroke:#333,stroke-width:2px
+    style TRANSFORM2 fill:#9cf,stroke:#333,stroke-width:2px
+    style ICEBERG_WRITE fill:#bfb,stroke:#333,stroke-width:2px
+    style CHECKPOINT fill:#fcf,stroke:#333,stroke-width:2px
+```
+
+### Sequence Diagram: End-to-End Flow
+
+```mermaid
+sequenceDiagram
+    participant PG as PostgreSQL
+    participant DBZ as Debezium
+    participant KF as Kafka
+    participant CONS as Consumer
+    participant TRANS as Transformer
+    participant PIPE as Pipeline
+    participant ICE as Iceberg
+
+    PG->>PG: INSERT customer
+    PG->>DBZ: WAL event
+    DBZ->>DBZ: Parse WAL
+    DBZ->>KF: Publish CDC event
+    Note over KF: Topic: postgres.public.customers
+
+    CONS->>KF: Poll for events
+    KF-->>CONS: Batch of CDC events
+    CONS->>CONS: Parse Debezium format
+    CONS->>TRANS: Raw CDC events
+
+    TRANS->>TRANS: Concatenate name
+    TRANS->>TRANS: Derive location
+    TRANS->>TRANS: Add metadata
+    TRANS->>TRANS: Apply business rules
+    TRANS-->>PIPE: PyArrow Table
+
+    PIPE->>ICE: Append data
+    ICE->>ICE: Create new snapshot
+    ICE->>ICE: Update manifests
+    ICE-->>PIPE: Success
+
+    PIPE->>CONS: Commit offsets
+    PIPE->>PIPE: Export metrics
+
+    Note over PG,ICE: End-to-end latency: 5-30 seconds
+```
+
+### Performance Characteristics
+
+```mermaid
+graph LR
+    subgraph "Python Orchestrator"
+        P_THRU[Throughput:<br/>~1K events/sec]
+        P_LAT[Latency:<br/>10-30s]
+        P_MEM[Memory:<br/>~1GB]
+    end
+
+    subgraph "Spark Streaming"
+        S_THRU[Throughput:<br/>~10K events/sec]
+        S_LAT[Latency:<br/>5-15s]
+        S_MEM[Memory:<br/>2-8GB]
+    end
+
+    subgraph "Workload Routing"
+        LOW[Low Volume<br/>< 1K events/sec]
+        HIGH[High Volume<br/>> 5K events/sec]
+    end
+
+    LOW -.->|Use| P_THRU
+    HIGH -.->|Use| S_THRU
+
+    style P_THRU fill:#9cf,stroke:#333,stroke-width:2px
+    style S_THRU fill:#bfb,stroke:#333,stroke-width:2px
 ```
 
 ## Observability Stack
