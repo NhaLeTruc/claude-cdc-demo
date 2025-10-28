@@ -1,0 +1,342 @@
+apiVersion: 1
+
+groups:
+  - orgId: 1
+    name: CDC Pipeline Alerts
+    folder: CDC Monitoring
+    interval: 1m
+    rules:
+      # Alert: High CDC Lag (>10 seconds)
+      - uid: cdc_high_lag
+        title: High CDC Lag Detected
+        condition: C
+        data:
+          - refId: A
+            relativeTimeRange:
+              from: 600
+              to: 0
+            datasourceUid: prometheus
+            model:
+              expr: cdc_lag_seconds
+              refId: A
+              intervalMs: 1000
+              maxDataPoints: 43200
+
+          - refId: B
+            relativeTimeRange:
+              from: 600
+              to: 0
+            datasourceUid: __expr__
+            model:
+              conditions:
+                - evaluator:
+                    params:
+                      - 10
+                    type: gt
+                  operator:
+                    type: and
+                  query:
+                    params:
+                      - B
+                  reducer:
+                    params: []
+                    type: last
+                  type: query
+              datasource:
+                type: __expr__
+                uid: __expr__
+              expression: A
+              refId: B
+              type: threshold
+
+          - refId: C
+            relativeTimeRange:
+              from: 600
+              to: 0
+            datasourceUid: __expr__
+            model:
+              datasource:
+                type: __expr__
+                uid: __expr__
+              expression: B
+              refId: C
+              type: classic_conditions
+
+        noDataState: NoData
+        execErrState: Error
+        for: 2m
+        annotations:
+          summary: CDC lag exceeded threshold
+          description: |
+            CDC lag for pipeline {{ $labels.pipeline }} is {{ $values.A }} seconds.
+            Threshold: 10 seconds.
+            This may indicate slow processing or high event volume.
+        labels:
+          severity: warning
+          component: cdc_pipeline
+        isPaused: false
+
+      # Alert: Very High CDC Lag (>30 seconds)
+      - uid: cdc_critical_lag
+        title: Critical CDC Lag Detected
+        condition: C
+        data:
+          - refId: A
+            relativeTimeRange:
+              from: 600
+              to: 0
+            datasourceUid: prometheus
+            model:
+              expr: cdc_lag_seconds
+              refId: A
+
+          - refId: B
+            datasourceUid: __expr__
+            model:
+              conditions:
+                - evaluator:
+                    params:
+                      - 30
+                    type: gt
+                  query:
+                    params:
+                      - A
+                  reducer:
+                    params: []
+                    type: last
+              expression: A
+              refId: B
+              type: threshold
+
+          - refId: C
+            datasourceUid: __expr__
+            model:
+              expression: B
+              refId: C
+              type: classic_conditions
+
+        noDataState: NoData
+        execErrState: Alerting
+        for: 5m
+        annotations:
+          summary: Critical CDC lag detected
+          description: |
+            CDC lag for pipeline {{ $labels.pipeline }} is {{ $values.A }} seconds.
+            Threshold: 30 seconds.
+            CRITICAL: Immediate action required!
+        labels:
+          severity: critical
+          component: cdc_pipeline
+        isPaused: false
+
+      # Alert: CDC Lag Increasing Trend
+      - uid: cdc_lag_trend
+        title: CDC Lag Increasing Trend
+        condition: C
+        data:
+          - refId: A
+            relativeTimeRange:
+              from: 1800
+              to: 0
+            datasourceUid: prometheus
+            model:
+              expr: deriv(cdc_lag_seconds[5m])
+              refId: A
+
+          - refId: B
+            datasourceUid: __expr__
+            model:
+              conditions:
+                - evaluator:
+                    params:
+                      - 0.1
+                    type: gt
+                  query:
+                    params:
+                      - A
+                  reducer:
+                    params: []
+                    type: avg
+              expression: A
+              refId: B
+              type: threshold
+
+          - refId: C
+            datasourceUid: __expr__
+            model:
+              expression: B
+              refId: C
+              type: classic_conditions
+
+        noDataState: NoData
+        execErrState: Error
+        for: 10m
+        annotations:
+          summary: CDC lag showing increasing trend
+          description: |
+            CDC lag for pipeline {{ $labels.pipeline }} is steadily increasing.
+            Rate of increase: {{ $values.A }} seconds/minute.
+            Investigate potential bottlenecks.
+        labels:
+          severity: warning
+          component: cdc_pipeline
+        isPaused: false
+
+      # Alert: CDC Event Processing Rate Low
+      - uid: cdc_low_throughput
+        title: Low CDC Event Processing Rate
+        condition: C
+        data:
+          - refId: A
+            relativeTimeRange:
+              from: 300
+              to: 0
+            datasourceUid: prometheus
+            model:
+              expr: rate(cdc_events_processed_total[5m])
+              refId: A
+
+          - refId: B
+            datasourceUid: __expr__
+            model:
+              conditions:
+                - evaluator:
+                    params:
+                      - 10
+                    type: lt
+                  query:
+                    params:
+                      - A
+                  reducer:
+                    params: []
+                    type: avg
+              expression: A
+              refId: B
+              type: threshold
+
+          - refId: C
+            datasourceUid: __expr__
+            model:
+              expression: B
+              refId: C
+              type: classic_conditions
+
+        noDataState: NoData
+        execErrState: Error
+        for: 5m
+        annotations:
+          summary: Low CDC event processing rate
+          description: |
+            CDC pipeline {{ $labels.pipeline }} is processing only {{ $values.A }} events/second.
+            Expected minimum: 10 events/second.
+            Check for pipeline issues or low source activity.
+        labels:
+          severity: info
+          component: cdc_pipeline
+        isPaused: false
+
+      # Alert: CDC Pipeline Stalled
+      - uid: cdc_pipeline_stalled
+        title: CDC Pipeline Stalled (No Events)
+        condition: C
+        data:
+          - refId: A
+            relativeTimeRange:
+              from: 600
+              to: 0
+            datasourceUid: prometheus
+            model:
+              expr: rate(cdc_events_processed_total[5m])
+              refId: A
+
+          - refId: B
+            datasourceUid: __expr__
+            model:
+              conditions:
+                - evaluator:
+                    params:
+                      - 0.1
+                    type: lt
+                  query:
+                    params:
+                      - A
+                  reducer:
+                    params: []
+                    type: max
+              expression: A
+              refId: B
+              type: threshold
+
+          - refId: C
+            datasourceUid: __expr__
+            model:
+              expression: B
+              refId: C
+              type: classic_conditions
+
+        noDataState: Alerting
+        execErrState: Alerting
+        for: 10m
+        annotations:
+          summary: CDC pipeline appears stalled
+          description: |
+            CDC pipeline {{ $labels.pipeline }} has processed no events in the last 10 minutes.
+            Processing rate: {{ $values.A }} events/second.
+            Check pipeline health and source database activity.
+        labels:
+          severity: critical
+          component: cdc_pipeline
+        isPaused: false
+
+      # Alert: High CDC Error Rate
+      - uid: cdc_high_error_rate
+        title: High CDC Error Rate
+        condition: C
+        data:
+          - refId: A
+            relativeTimeRange:
+              from: 300
+              to: 0
+            datasourceUid: prometheus
+            model:
+              expr: rate(cdc_events_failed_total[5m])
+              refId: A
+
+          - refId: B
+            datasourceUid: __expr__
+            model:
+              conditions:
+                - evaluator:
+                    params:
+                      - 0.5
+                    type: gt
+                  query:
+                    params:
+                      - A
+                  reducer:
+                    params: []
+                    type: avg
+              expression: A
+              refId: B
+              type: threshold
+
+          - refId: C
+            datasourceUid: __expr__
+            model:
+              expression: B
+              refId: C
+              type: classic_conditions
+
+        noDataState: NoData
+        execErrState: Error
+        for: 3m
+        annotations:
+          summary: High error rate in CDC pipeline
+          description: |
+            CDC pipeline {{ $labels.pipeline }} has error rate of {{ $values.A }} errors/second.
+            Threshold: 0.5 errors/second.
+            Check logs for error details.
+        labels:
+          severity: warning
+          component: cdc_pipeline
+        isPaused: false
