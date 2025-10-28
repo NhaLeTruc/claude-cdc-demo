@@ -199,18 +199,18 @@
 
 ### Implementation for User Story 3
 
-- [ ] T093 [P] [US3] Create DeltaLake table manager with CDF enabled in src/cdc_pipelines/deltalake/table_manager.py
-- [ ] T094 [P] [US3] Create Delta CDF query interface in src/cdc_pipelines/deltalake/cdf_reader.py
-- [ ] T095 [US3] Create Delta version tracker in src/cdc_pipelines/deltalake/version_tracker.py (depends on T093)
-- [ ] T096 [US3] Implement DeltaLake CDF pipeline orchestrator in src/cdc_pipelines/deltalake/pipeline.py (depends on T093-T095)
-- [ ] T097 [US3] Add DeltaLake CDF metrics export in src/observability/metrics.py
+- [X] T093 [P] [US3] Create DeltaLake table manager with CDF enabled in src/cdc_pipelines/deltalake/table_manager.py
+- [X] T094 [P] [US3] Create Delta CDF query interface in src/cdc_pipelines/deltalake/cdf_reader.py
+- [X] T095 [US3] Create Delta version tracker in src/cdc_pipelines/deltalake/version_tracker.py (depends on T093)
+- [X] T096 [US3] Implement DeltaLake CDF pipeline orchestrator in src/cdc_pipelines/deltalake/pipeline.py (depends on T093-T095)
+- [X] T097 [US3] Add DeltaLake CDF metrics export in src/observability/metrics.py
 - [X] T098 [P] [US3] Create Delta table initialization script in scripts/init-delta-tables.sh
-- [ ] T099 [P] [US3] Create sample Delta CDF demo script in scripts/demo-delta-cdf.sh
+- [X] T099 [P] [US3] Create sample Delta CDF demo script in scripts/demo-delta-cdf.sh
 
 ### Documentation for User Story 3
 
-- [ ] T100 [P] [US3] Create DeltaLake CDC pipeline README in docs/pipelines/deltalake.md
-- [ ] T101 [P] [US3] Add DeltaLake CDF architecture diagram in docs/architecture.md
+- [X] T100 [P] [US3] Create DeltaLake CDC pipeline README in docs/pipelines/deltalake.md
+- [X] T101 [P] [US3] Add DeltaLake CDF architecture diagram in docs/architecture.md
 
 **Checkpoint**: User Stories 1, 2, AND 3 should all work independently
 
