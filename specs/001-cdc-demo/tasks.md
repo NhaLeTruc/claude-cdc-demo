@@ -329,14 +329,14 @@
 
 **Purpose**: Complete documentation as version-controlled artifacts
 
-- [ ] T155 [P] Create main architecture diagram (all services) in docs/architecture.md
-- [ ] T156 [P] Create CDC approaches comparison document in docs/cdc_approaches.md
-- [ ] T157 [P] Create troubleshooting guide in docs/troubleshooting.md
-- [ ] T158 [P] Create main README.md with project overview
-- [ ] T159 [P] Create CONTRIBUTING.md with contribution guidelines
+- [X] T155 [P] Create main architecture diagram (all services) in docs/architecture.md
+- [X] T156 [P] Create CDC approaches comparison document in docs/cdc_approaches.md
+- [X] T157 [P] Create troubleshooting guide in docs/troubleshooting.md
+- [X] T158 [P] Create main README.md with project overview
+- [X] T159 [P] Create CONTRIBUTING.md with contribution guidelines
 - [ ] T160 [P] Update quickstart.md with validated instructions (test on clean machine)
-- [ ] T161 [P] Create API documentation for validation interfaces in docs/api/validation.md
-- [ ] T162 [P] Create CLI reference documentation in docs/cli_reference.md
+- [X] T161 [P] Create API documentation for validation interfaces in docs/api/validation.md
+- [X] T162 [P] Create CLI reference documentation in docs/cli_reference.md
 
 ---
 
