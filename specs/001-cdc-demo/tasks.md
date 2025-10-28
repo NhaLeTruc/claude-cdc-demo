@@ -296,15 +296,15 @@
 
 - [X] T134 [P] Create schema evolution test table in docker/postgres/init.sql
 - [X] T135 [P] Unit test for schema evolution detection in tests/unit/test_cdc_pipelines/test_schema_detection.py
-- [ ] T136 [P] Data quality test for ADD COLUMN scenario in tests/data_quality/test_schema_evolution.py
-- [ ] T137 [P] Data quality test for DROP COLUMN scenario in tests/data_quality/test_schema_evolution.py
-- [ ] T138 [P] Data quality test for TYPE CHANGE scenario in tests/data_quality/test_schema_evolution.py
-- [ ] T139 [P] Data quality test for RENAME COLUMN scenario in tests/data_quality/test_schema_evolution.py
-- [ ] T140 Create schema evolution monitoring script in scripts/monitor-schema-evolution.sh
-- [ ] T141 [P] Integration test for ADD COLUMN in Postgres CDC pipeline in tests/integration/test_postgres_schema_evolution.py
-- [ ] T142 [P] Integration test for DROP COLUMN in Postgres CDC pipeline in tests/integration/test_postgres_schema_evolution.py
-- [ ] T143 [P] Integration test for ALTER COLUMN TYPE in Postgres CDC pipeline in tests/integration/test_postgres_schema_evolution.py
-- [ ] T144 [P] Integration test for RENAME COLUMN in Postgres CDC pipeline in tests/integration/test_postgres_schema_evolution.py
+- [X] T136 [P] Data quality test for ADD COLUMN scenario in tests/data_quality/test_schema_evolution.py
+- [X] T137 [P] Data quality test for DROP COLUMN scenario in tests/data_quality/test_schema_evolution.py
+- [X] T138 [P] Data quality test for TYPE CHANGE scenario in tests/data_quality/test_schema_evolution.py
+- [X] T139 [P] Data quality test for RENAME COLUMN scenario in tests/data_quality/test_schema_evolution.py
+- [X] T140 Create schema evolution monitoring script in scripts/monitor-schema-evolution.sh
+- [X] T141 [P] Integration test for ADD COLUMN in Postgres CDC pipeline in tests/integration/test_postgres_schema_evolution.py
+- [X] T142 [P] Integration test for DROP COLUMN in Postgres CDC pipeline in tests/integration/test_postgres_schema_evolution.py
+- [X] T143 [P] Integration test for ALTER COLUMN TYPE in Postgres CDC pipeline in tests/integration/test_postgres_schema_evolution.py
+- [X] T144 [P] Integration test for RENAME COLUMN in Postgres CDC pipeline in tests/integration/test_postgres_schema_evolution.py
 
 ---
 
