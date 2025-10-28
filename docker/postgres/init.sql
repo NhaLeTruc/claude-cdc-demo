@@ -98,3 +98,89 @@ INSERT INTO products (product_name, description, category, price, stock_quantity
     ('Mouse', 'Wireless mouse', 'Electronics', 29.99, 200),
     ('Keyboard', 'Mechanical keyboard', 'Electronics', 89.99, 150)
 ON CONFLICT DO NOTHING;
+
+-- ============================================================================
+-- Schema Evolution Test Table
+-- ============================================================================
+-- This table is used to test schema evolution scenarios in CDC pipelines.
+-- Tests include: ADD COLUMN, DROP COLUMN, ALTER TYPE, RENAME COLUMN
+-- ============================================================================
+
+CREATE TABLE IF NOT EXISTS schema_evolution_test (
+    id SERIAL PRIMARY KEY,
+    version INTEGER NOT NULL DEFAULT 1,
+    name VARCHAR(100) NOT NULL,
+    description TEXT,
+    status VARCHAR(50) DEFAULT 'active',
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+-- Create index
+CREATE INDEX IF NOT EXISTS idx_schema_evolution_test_status ON schema_evolution_test(status);
+
+-- Add trigger for updated_at
+CREATE TRIGGER update_schema_evolution_test_updated_at BEFORE UPDATE ON schema_evolution_test
+    FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+
+-- Insert initial test data
+INSERT INTO schema_evolution_test (version, name, description, status) VALUES
+    (1, 'Test Record 1', 'Initial schema version', 'active'),
+    (1, 'Test Record 2', 'Initial schema version', 'active'),
+    (1, 'Test Record 3', 'Initial schema version', 'inactive')
+ON CONFLICT DO NOTHING;
+
+-- ============================================================================
+-- Schema Evolution Test Scenarios
+-- ============================================================================
+-- The following SQL statements can be executed to test schema evolution.
+-- These are commented out and should be run manually during testing.
+-- ============================================================================
+
+-- Scenario 1: ADD COLUMN (backward compatible)
+-- ALTER TABLE schema_evolution_test ADD COLUMN email VARCHAR(255);
+-- ALTER TABLE schema_evolution_test ADD COLUMN phone VARCHAR(20);
+-- ALTER TABLE schema_evolution_test ADD COLUMN metadata JSONB DEFAULT '{}';
+
+-- Scenario 2: DROP COLUMN (potentially breaking)
+-- ALTER TABLE schema_evolution_test DROP COLUMN description;
+-- ALTER TABLE schema_evolution_test DROP COLUMN phone;
+
+-- Scenario 3: ALTER COLUMN TYPE (potentially breaking)
+-- ALTER TABLE schema_evolution_test ALTER COLUMN status TYPE VARCHAR(100);
+-- ALTER TABLE schema_evolution_test ALTER COLUMN version TYPE BIGINT;
+
+-- Scenario 4: RENAME COLUMN (breaking for non-schema-aware consumers)
+-- ALTER TABLE schema_evolution_test RENAME COLUMN name TO display_name;
+-- ALTER TABLE schema_evolution_test RENAME COLUMN description TO description_text;
+
+-- Scenario 5: ADD NOT NULL CONSTRAINT (breaking)
+-- ALTER TABLE schema_evolution_test ALTER COLUMN email SET NOT NULL;
+
+-- Scenario 6: ADD DEFAULT VALUE (backward compatible)
+-- ALTER TABLE schema_evolution_test ALTER COLUMN status SET DEFAULT 'pending';
+
+-- Scenario 7: ADD CHECK CONSTRAINT (potentially breaking)
+-- ALTER TABLE schema_evolution_test ADD CONSTRAINT check_status
+--     CHECK (status IN ('active', 'inactive', 'pending', 'deleted'));
+
+-- ============================================================================
+-- Schema Version Tracking Table
+-- ============================================================================
+-- This table tracks schema changes for auditing and rollback purposes
+-- ============================================================================
+
+CREATE TABLE IF NOT EXISTS schema_version_history (
+    version_id SERIAL PRIMARY KEY,
+    table_name VARCHAR(255) NOT NULL,
+    schema_version INTEGER NOT NULL,
+    change_type VARCHAR(50) NOT NULL, -- ADD_COLUMN, DROP_COLUMN, ALTER_TYPE, RENAME_COLUMN
+    change_description TEXT NOT NULL,
+    executed_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    executed_by VARCHAR(100) DEFAULT CURRENT_USER
+);
+
+-- Insert initial schema version
+INSERT INTO schema_version_history (table_name, schema_version, change_type, change_description) VALUES
+    ('schema_evolution_test', 1, 'CREATE_TABLE', 'Initial table creation with base schema')
+ON CONFLICT DO NOTHING;
