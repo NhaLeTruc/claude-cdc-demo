@@ -51,9 +51,9 @@ class TestPostgresCDCPipeline:
         # This would check Kafka topic or DeltaLake destination
         # For now, just verify insert succeeded
         result = postgres_connection.execute_query(
-            "SELECT COUNT(*) FROM customers WHERE customer_id = 1"
+            "SELECT COUNT(*) as count FROM customers WHERE customer_id = 1"
         )
-        assert result[0][0] == 1
+        assert result[0]['count'] == 1
 
     def test_update_capture(self, postgres_connection, clean_customers_table):
         """Test CDC captures UPDATE operations."""
@@ -82,7 +82,7 @@ class TestPostgresCDCPipeline:
         result = postgres_connection.execute_query(
             "SELECT email FROM customers WHERE customer_id = 1"
         )
-        assert result[0][0] == "john.doe@example.com"
+        assert result[0]['email'] == "john.doe@example.com"
 
     def test_delete_capture(self, postgres_connection, clean_customers_table):
         """Test CDC captures DELETE operations."""
@@ -103,9 +103,9 @@ class TestPostgresCDCPipeline:
 
         # Verify deletion
         result = postgres_connection.execute_query(
-            "SELECT COUNT(*) FROM customers WHERE customer_id = 1"
+            "SELECT COUNT(*) as count FROM customers WHERE customer_id = 1"
         )
-        assert result[0][0] == 0
+        assert result[0]['count'] == 0
 
     def test_bulk_insert_capture(self, postgres_connection, clean_customers_table):
         """Test CDC handles bulk inserts."""
@@ -121,8 +121,8 @@ class TestPostgresCDCPipeline:
         time.sleep(5)
 
         # Verify all inserts succeeded
-        result = postgres_connection.execute_query("SELECT COUNT(*) FROM customers")
-        assert result[0][0] == 100
+        result = postgres_connection.execute_query("SELECT COUNT(*) as count FROM customers")
+        assert result[0]['count'] == 100
 
     def test_transaction_ordering(self, postgres_connection, clean_customers_table):
         """Test CDC maintains transaction order."""
@@ -143,24 +143,24 @@ class TestPostgresCDCPipeline:
         result = postgres_connection.execute_query(
             "SELECT email FROM customers WHERE customer_id = 1"
         )
-        assert result[0][0] == "john.updated@example.com"
+        assert result[0]['email'] == "john.updated@example.com"
 
     def test_null_value_handling(self, postgres_connection, clean_customers_table):
         """Test CDC handles NULL values correctly."""
         postgres_connection.execute_query(
             """
-            INSERT INTO customers (customer_id, first_name, last_name, email, created_at)
-            VALUES (1, 'John', NULL, NULL, NOW())
+            INSERT INTO customers (customer_id, first_name, last_name, email, phone, address, created_at)
+            VALUES (1, 'John', 'Doe', 'john@example.com', NULL, NULL, NOW())
             """
         )
 
         time.sleep(2)
 
         result = postgres_connection.execute_query(
-            "SELECT last_name, email FROM customers WHERE customer_id = 1"
+            "SELECT phone, address FROM customers WHERE customer_id = 1"
         )
-        assert result[0][0] is None
-        assert result[0][1] is None
+        assert result[0]['phone'] is None
+        assert result[0]['address'] is None
 
     @pytest.mark.skip(reason="Requires Debezium connector to be registered")
     def test_cdc_lag_within_threshold(self, postgres_connection, clean_customers_table):
