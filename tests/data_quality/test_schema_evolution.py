@@ -21,20 +21,7 @@ from decimal import Decimal
 # ============================================================================
 # Test Fixtures
 # ============================================================================
-
-@pytest.fixture
-def postgres_connection():
-    """Create PostgreSQL connection for testing."""
-    conn = psycopg2.connect(
-        host="localhost",
-        port=5432,
-        database="cdc_demo",
-        user="postgres",
-        password="postgres"
-    )
-    yield conn
-    conn.close()
-
+# Note: postgres_connection fixture is defined in tests/conftest.py
 
 @pytest.fixture
 def setup_test_table(postgres_connection):
