@@ -157,6 +157,31 @@ iceberg_incremental_batch_size = Histogram(
     buckets=[10, 100, 1000, 10000, 100000, 1000000],
 )
 
+# Cross-Storage CDC Metrics
+cross_storage_events_processed = Counter(
+    "cross_storage_events_processed_total",
+    "Total events processed in cross-storage pipeline",
+    ["source_system", "destination_system"],
+)
+
+cross_storage_transformations_applied = Counter(
+    "cross_storage_transformations_applied_total",
+    "Total transformations applied",
+    ["transformation_type"],
+)
+
+cross_storage_pipeline_lag_seconds = Gauge(
+    "cross_storage_pipeline_lag_seconds",
+    "End-to-end pipeline lag in seconds",
+    ["pipeline_id"],
+)
+
+cross_storage_batch_processing_duration = Histogram(
+    "cross_storage_batch_processing_duration_seconds",
+    "Time taken to process a batch end-to-end",
+    buckets=[0.1, 0.5, 1.0, 2.0, 5.0, 10.0, 30.0, 60.0],
+)
+
 checksum_mismatches = Counter(
     "checksum_mismatches_total",
     "Total number of checksum mismatches",
@@ -378,3 +403,50 @@ class MetricsExporter:
         iceberg_snapshots_lag.labels(table_identifier=table_identifier).set(
             snapshots_behind
         )
+
+    def record_cross_storage_event(
+        self, source_system: str, destination_system: str, event_count: int
+    ) -> None:
+        """
+        Record cross-storage CDC event processing.
+
+        Args:
+            source_system: Source system name (e.g., "postgres")
+            destination_system: Destination system name (e.g., "iceberg")
+            event_count: Number of events processed
+        """
+        cross_storage_events_processed.labels(
+            source_system=source_system, destination_system=destination_system
+        ).inc(event_count)
+
+    def record_transformation(self, transformation_type: str) -> None:
+        """
+        Record data transformation.
+
+        Args:
+            transformation_type: Type of transformation applied
+        """
+        cross_storage_transformations_applied.labels(
+            transformation_type=transformation_type
+        ).inc()
+
+    def update_cross_storage_lag(self, pipeline_id: str, lag_seconds: float) -> None:
+        """
+        Update cross-storage pipeline lag.
+
+        Args:
+            pipeline_id: Pipeline identifier
+            lag_seconds: End-to-end lag in seconds
+        """
+        cross_storage_pipeline_lag_seconds.labels(pipeline_id=pipeline_id).set(
+            lag_seconds
+        )
+
+    def record_cross_storage_batch(self, duration: float) -> None:
+        """
+        Record cross-storage batch processing duration.
+
+        Args:
+            duration: Processing duration in seconds
+        """
+        cross_storage_batch_processing_duration.observe(duration)
