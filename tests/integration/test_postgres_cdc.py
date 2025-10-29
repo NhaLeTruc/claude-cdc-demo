@@ -11,19 +11,11 @@ class TestPostgresCDCPipeline:
     """Integration tests for Postgres CDC pipeline."""
 
     @pytest.fixture(scope="class")
-    def postgres_connection(self):
+    def postgres_connection(self, postgres_credentials):
         """Create Postgres connection for testing."""
         from src.cdc_pipelines.postgres.connection import PostgresConnectionManager
 
-        config = {
-            "host": "localhost",
-            "port": 5432,
-            "user": "cdcuser",
-            "password": "cdcpass",
-            "database": "cdcdb",
-        }
-
-        manager = PostgresConnectionManager(**config)
+        manager = PostgresConnectionManager(**postgres_credentials)
         yield manager
         manager.close()
 
