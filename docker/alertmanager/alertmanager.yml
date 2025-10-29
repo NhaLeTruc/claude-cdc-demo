@@ -1,0 +1,33 @@
+# AlertManager Configuration for CDC Demo
+global:
+  resolve_timeout: 5m
+
+# Route all alerts to test receiver
+route:
+  receiver: 'test-receiver'
+  group_by: ['alertname', 'severity']
+  group_wait: 10s
+  group_interval: 10s
+  repeat_interval: 1h
+
+  # Test environment route
+  routes:
+    - match:
+        environment: test
+      receiver: 'test-receiver'
+      continue: true
+
+# Receivers configuration
+receivers:
+  - name: 'test-receiver'
+    webhook_configs:
+      - url: 'http://localhost:5001/webhook'
+        send_resolved: true
+
+# Inhibition rules (optional)
+inhibit_rules:
+  - source_match:
+      severity: 'critical'
+    target_match:
+      severity: 'warning'
+    equal: ['alertname', 'instance']
