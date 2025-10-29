@@ -1,0 +1,188 @@
+openapi: 3.0.0
+info:
+  title: Apache Spark Service Contract
+  description: Docker service contract for Spark Master with Delta Lake support
+  version: 1.0.0
+
+servers:
+  - url: http://localhost:8080
+    description: Spark Master UI
+  - url: spark://localhost:7077
+    description: Spark Master RPC endpoint
+
+paths:
+  /:
+    get:
+      summary: Spark Master Web UI
+      description: Access the Spark Master web interface showing cluster status
+      responses:
+        '200':
+          description: Spark Master UI page
+          content:
+            text/html:
+              schema:
+                type: string
+
+  /json/:
+    get:
+      summary: Cluster Status JSON
+      description: Get cluster status and metrics in JSON format
+      responses:
+        '200':
+          description: Cluster status
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    enum: [ALIVE, DEAD]
+                  workers:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        id:
+                          type: string
+                        host:
+                          type: string
+                        state:
+                          type: string
+                  cores:
+                    type: integer
+                  memory:
+                    type: integer
+
+components:
+  schemas:
+    HealthCheck:
+      type: object
+      description: Docker health check configuration
+      properties:
+        endpoint:
+          type: string
+          example: "http://localhost:8080"
+        interval:
+          type: string
+          example: "30s"
+        timeout:
+          type: string
+          example: "10s"
+        retries:
+          type: integer
+          example: 3
+
+    ServiceConfiguration:
+      type: object
+      description: Docker Compose service configuration
+      properties:
+        image:
+          type: string
+          example: "bitnami/spark:3.5.2"
+        container_name:
+          type: string
+          example: "cdc-spark"
+        environment:
+          type: object
+          properties:
+            SPARK_MODE:
+              type: string
+              enum: [master, worker]
+              example: "master"
+            SPARK_MASTER_HOST:
+              type: string
+              example: "spark"
+            SPARK_DRIVER_MEMORY:
+              type: string
+              example: "1g"
+            SPARK_EXECUTOR_MEMORY:
+              type: string
+              example: "1g"
+        ports:
+          type: array
+          items:
+            type: string
+          example: ["7077:7077", "8080:8080", "4040:4040"]
+        volumes:
+          type: array
+          items:
+            type: string
+          example:
+            - "./data/delta-tables:/opt/delta-tables"
+            - "./configs/spark:/opt/spark/conf:ro"
+        mem_limit:
+          type: string
+          example: "2g"
+        cpus:
+          type: string
+          example: "1.0"
+
+    SparkConfiguration:
+      type: object
+      description: spark-defaults.conf settings
+      properties:
+        spark.sql.extensions:
+          type: string
+          example: "io.delta.sql.DeltaSparkSessionExtension"
+        spark.sql.catalog.spark_catalog:
+          type: string
+          example: "org.apache.spark.sql.delta.catalog.DeltaCatalog"
+        spark.jars.packages:
+          type: string
+          example: "io.delta:delta-core_2.12:3.0.0"
+        spark.sql.warehouse.dir:
+          type: string
+          example: "/opt/delta-tables"
+        spark.eventLog.enabled:
+          type: boolean
+          example: false
+
+# Test Fixtures Contract
+x-test-fixtures:
+  spark_session:
+    description: Pytest fixture providing Spark session with Delta Lake
+    scope: session
+    setup: |
+      from pyspark.sql import SparkSession
+      session = SparkSession.builder \
+        .master("spark://localhost:7077") \
+        .appName("pytest") \
+        .config("spark.sql.extensions", "io.delta.sql.DeltaSparkSessionExtension") \
+        .config("spark.sql.catalog.spark_catalog", "org.apache.spark.sql.delta.catalog.DeltaCatalog") \
+        .config("spark.jars.packages", "io.delta:delta-core_2.12:3.0.0") \
+        .getOrCreate()
+      return session
+    teardown: |
+      session.stop()
+
+  delta_table_path:
+    description: Pytest fixture providing isolated Delta table path
+    scope: function
+    setup: |
+      import uuid
+      table_path = f"/opt/delta-tables/test_{uuid.uuid4().hex[:8]}"
+      return table_path
+    teardown: |
+      import shutil
+      if os.path.exists(table_path):
+        shutil.rmtree(table_path)
+
+# Resource Limits
+x-resource-requirements:
+  minimum:
+    memory: "1.5GB"
+    cpu: "0.5"
+  recommended:
+    memory: "2GB"
+    cpu: "1.0"
+  maximum:
+    memory: "4GB"
+    cpu: "2.0"
+
+# Performance Targets
+x-performance-targets:
+  startup_time: "< 30s"
+  job_initialization: "< 10s"
+  delta_write_1k_rows: "< 5s"
+  health_check_response: "< 2s"

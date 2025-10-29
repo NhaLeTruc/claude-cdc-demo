@@ -1,0 +1,427 @@
+openapi: 3.0.0
+info:
+  title: Prometheus AlertManager Service Contract
+  description: Docker service contract for AlertManager test environment
+  version: 1.0.0
+
+servers:
+  - url: http://localhost:9093
+    description: AlertManager UI and API
+
+paths:
+  /-/healthy:
+    get:
+      summary: Health Check
+      description: Health check endpoint for Docker health monitoring
+      responses:
+        '200':
+          description: AlertManager is healthy
+          content:
+            text/plain:
+              schema:
+                type: string
+                example: "OK"
+
+  /-/ready:
+    get:
+      summary: Readiness Check
+      description: Check if AlertManager is ready to accept traffic
+      responses:
+        '200':
+          description: AlertManager is ready
+          content:
+            text/plain:
+              schema:
+                type: string
+                example: "OK"
+
+  /api/v1/alerts:
+    get:
+      summary: List Active Alerts
+      description: Get list of all active alerts
+      responses:
+        '200':
+          description: List of alerts
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    example: "success"
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Alert'
+
+    post:
+      summary: Create Alert
+      description: Post new alerts to AlertManager
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: array
+              items:
+                $ref: '#/components/schemas/AlertInput'
+      responses:
+        '200':
+          description: Alerts accepted
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    example: "success"
+
+  /api/v1/silences:
+    get:
+      summary: List Silences
+      description: Get list of all active silences
+      responses:
+        '200':
+          description: List of silences
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Silence'
+
+    post:
+      summary: Create Silence
+      description: Create a new silence to suppress alerts
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SilenceInput'
+      responses:
+        '200':
+          description: Silence created
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                  data:
+                    type: object
+                    properties:
+                      silenceID:
+                        type: string
+
+  /api/v1/silence/{silenceID}:
+    delete:
+      summary: Delete Silence
+      description: Delete an existing silence
+      parameters:
+        - name: silenceID
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Silence deleted
+
+  /api/v1/status:
+    get:
+      summary: AlertManager Status
+      description: Get AlertManager configuration and runtime status
+      responses:
+        '200':
+          description: Status information
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                  data:
+                    type: object
+                    properties:
+                      config:
+                        $ref: '#/components/schemas/Config'
+                      uptime:
+                        type: string
+                      versionInfo:
+                        type: object
+
+components:
+  schemas:
+    Alert:
+      type: object
+      properties:
+        labels:
+          type: object
+          additionalProperties:
+            type: string
+        annotations:
+          type: object
+          additionalProperties:
+            type: string
+        startsAt:
+          type: string
+          format: date-time
+        endsAt:
+          type: string
+          format: date-time
+        status:
+          type: object
+          properties:
+            state:
+              type: string
+              enum: [active, suppressed, unprocessed]
+
+    AlertInput:
+      type: object
+      required:
+        - labels
+      properties:
+        labels:
+          type: object
+          required:
+            - alertname
+          properties:
+            alertname:
+              type: string
+            severity:
+              type: string
+              enum: [critical, warning, info]
+            environment:
+              type: string
+              example: "test"
+          additionalProperties:
+            type: string
+        annotations:
+          type: object
+          properties:
+            summary:
+              type: string
+            description:
+              type: string
+          additionalProperties:
+            type: string
+        startsAt:
+          type: string
+          format: date-time
+        endsAt:
+          type: string
+          format: date-time
+
+    Silence:
+      type: object
+      properties:
+        id:
+          type: string
+        matchers:
+          type: array
+          items:
+            type: object
+            properties:
+              name:
+                type: string
+              value:
+                type: string
+              isRegex:
+                type: boolean
+        startsAt:
+          type: string
+          format: date-time
+        endsAt:
+          type: string
+          format: date-time
+        createdBy:
+          type: string
+        comment:
+          type: string
+
+    SilenceInput:
+      type: object
+      required:
+        - matchers
+        - startsAt
+        - endsAt
+        - createdBy
+        - comment
+      properties:
+        matchers:
+          type: array
+          items:
+            type: object
+            required:
+              - name
+              - value
+            properties:
+              name:
+                type: string
+              value:
+                type: string
+              isRegex:
+                type: boolean
+                default: false
+        startsAt:
+          type: string
+          format: date-time
+        endsAt:
+          type: string
+          format: date-time
+        createdBy:
+          type: string
+        comment:
+          type: string
+
+    Config:
+      type: object
+      properties:
+        route:
+          type: object
+          properties:
+            receiver:
+              type: string
+            group_by:
+              type: array
+              items:
+                type: string
+            group_wait:
+              type: string
+            group_interval:
+              type: string
+            repeat_interval:
+              type: string
+        receivers:
+          type: array
+          items:
+            type: object
+            properties:
+              name:
+                type: string
+              webhook_configs:
+                type: array
+                items:
+                  type: object
+
+    ServiceConfiguration:
+      type: object
+      description: Docker Compose service configuration
+      properties:
+        image:
+          type: string
+          example: "prom/alertmanager:v0.26.0"
+        container_name:
+          type: string
+          example: "cdc-alertmanager"
+        command:
+          type: array
+          items:
+            type: string
+          example:
+            - "--config.file=/etc/alertmanager/alertmanager.yml"
+            - "--storage.path=/alertmanager"
+        ports:
+          type: array
+          items:
+            type: string
+          example: ["9093:9093", "9094:9094"]
+        volumes:
+          type: array
+          items:
+            type: string
+          example:
+            - "./configs/alertmanager:/etc/alertmanager:ro"
+            - "alertmanager-data:/alertmanager"
+        mem_limit:
+          type: string
+          example: "256m"
+        cpus:
+          type: string
+          example: "0.5"
+
+# Test Fixtures Contract
+x-test-fixtures:
+  alertmanager_client:
+    description: Pytest fixture providing AlertManager API client
+    scope: function
+    setup: |
+      import requests
+      base_url = "http://localhost:9093"
+      client = {
+        "base_url": base_url,
+        "post_alert": lambda alert: requests.post(f"{base_url}/api/v1/alerts", json=[alert]),
+        "get_alerts": lambda: requests.get(f"{base_url}/api/v1/alerts").json(),
+        "post_silence": lambda silence: requests.post(f"{base_url}/api/v1/silences", json=silence),
+        "delete_silence": lambda sid: requests.delete(f"{base_url}/api/v1/silence/{sid}")
+      }
+      return client
+    teardown: |
+      # Clean up test alerts and silences
+      alerts = requests.get(f"{base_url}/api/v1/alerts").json()
+      for alert in alerts.get("data", []):
+        if alert.get("labels", {}).get("environment") == "test":
+          pass  # Alerts auto-expire
+
+      silences = requests.get(f"{base_url}/api/v1/silences").json()
+      for silence in silences.get("data", []):
+        if silence.get("createdBy") == "pytest":
+          requests.delete(f"{base_url}/api/v1/silence/{silence['id']}")
+
+# Resource Limits
+x-resource-requirements:
+  minimum:
+    memory: "128MB"
+    cpu: "0.25"
+  recommended:
+    memory: "256MB"
+    cpu: "0.5"
+  maximum:
+    memory: "512MB"
+    cpu: "1.0"
+
+# Performance Targets
+x-performance-targets:
+  startup_time: "< 10s"
+  api_response_time: "< 500ms"
+  alert_processing: "< 2s"
+  health_check_response: "< 1s"
+
+# Test Configuration
+x-alertmanager-config:
+  file: "configs/alertmanager/alertmanager.yml"
+  content: |
+    global:
+      resolve_timeout: 5m
+
+    route:
+      receiver: 'test-receiver'
+      group_by: ['alertname', 'severity']
+      group_wait: 10s
+      group_interval: 10s
+      repeat_interval: 1h
+      routes:
+        - match:
+            environment: test
+          receiver: 'test-webhook'
+
+    receivers:
+      - name: 'test-receiver'
+        webhook_configs:
+          - url: 'http://localhost:5001/webhook'
+            send_resolved: true
+
+      - name: 'test-webhook'
+        webhook_configs:
+          - url: 'http://localhost:5001/webhook/test'
+            send_resolved: true
