@@ -4,6 +4,13 @@ import time
 import pytest
 from typing import Generator
 
+# Check if MySQL connector is available
+try:
+    import mysql.connector
+    MYSQL_AVAILABLE = True
+except ImportError:
+    MYSQL_AVAILABLE = False
+
 
 @pytest.fixture
 def mysql_connection():
@@ -43,6 +50,10 @@ def clean_products_table(mysql_connection):
 
 
 @pytest.mark.integration
+@pytest.mark.skipif(
+    not MYSQL_AVAILABLE,
+    reason="MySQL connector not installed. Install with: pip install mysql-connector-python"
+)
 class TestMySQLCDCPipeline:
     """Integration tests for MySQL CDC pipeline."""
 
@@ -52,11 +63,11 @@ class TestMySQLCDCPipeline:
         queries = [
             "START TRANSACTION",
             """
-            INSERT INTO products (product_id, name, category, price, stock_quantity)
+            INSERT INTO products (product_id, product_name, category, price, stock_quantity)
             VALUES (1000, 'Product A', 'Electronics', 99.99, 100)
             """,
             """
-            INSERT INTO products (product_id, name, category, price, stock_quantity)
+            INSERT INTO products (product_id, product_name, category, price, stock_quantity)
             VALUES (1001, 'Product B', 'Electronics', 149.99, 50)
             """,
             """
@@ -93,7 +104,7 @@ class TestMySQLCDCPipeline:
             )
 
         insert_query = f"""
-            INSERT INTO products (product_id, name, category, price, stock_quantity)
+            INSERT INTO products (product_id, product_name, category, price, stock_quantity)
             VALUES {','.join(values)}
         """
 
@@ -115,7 +126,7 @@ class TestMySQLCDCPipeline:
             "START TRANSACTION",
             # Insert
             """
-            INSERT INTO products (product_id, name, category, price, stock_quantity)
+            INSERT INTO products (product_id, product_name, category, price, stock_quantity)
             VALUES (1000, 'Test Product', 'Test', 100.0, 50)
             """,
             # Update same record
@@ -125,7 +136,7 @@ class TestMySQLCDCPipeline:
             """,
             # Insert another
             """
-            INSERT INTO products (product_id, name, category, price, stock_quantity)
+            INSERT INTO products (product_id, product_name, category, price, stock_quantity)
             VALUES (1001, 'Test Product 2', 'Test', 200.0, 30)
             """,
             # Delete first one
@@ -154,7 +165,7 @@ class TestMySQLCDCPipeline:
         queries = [
             "START TRANSACTION",
             """
-            INSERT INTO products (product_id, name, category, price, stock_quantity)
+            INSERT INTO products (product_id, product_name, category, price, stock_quantity)
             VALUES (1000, 'Rollback Test', 'Test', 100.0, 50)
             """,
             "ROLLBACK",
@@ -176,7 +187,7 @@ class TestMySQLCDCPipeline:
         """Test CDC handles NULL values correctly."""
         mysql_connection.execute_query(
             """
-            INSERT INTO products (product_id, name, category, price, stock_quantity, description)
+            INSERT INTO products (product_id, product_name, category, price, stock_quantity, description)
             VALUES (1000, 'Null Test', NULL, 100.0, 50, NULL)
             """,
             fetch=False,
@@ -197,7 +208,7 @@ class TestMySQLCDCPipeline:
         # Insert initial record
         mysql_connection.execute_query(
             """
-            INSERT INTO products (product_id, name, category, price, stock_quantity)
+            INSERT INTO products (product_id, product_name, category, price, stock_quantity)
             VALUES (1000, 'Concurrent Test', 'Test', 100.0, 100)
             """,
             fetch=False,
@@ -230,7 +241,7 @@ class TestMySQLCDCPipeline:
 
         mysql_connection.execute_query(
             """
-            INSERT INTO products (product_id, name, category, price, stock_quantity, description)
+            INSERT INTO products (product_id, product_name, category, price, stock_quantity, description)
             VALUES (%s, %s, %s, %s, %s, %s)
             """,
             params=(1000, "Large Text Test", "Test", 100.0, 50, large_description),
@@ -251,7 +262,7 @@ class TestMySQLCDCPipeline:
 
         mysql_connection.execute_query(
             """
-            INSERT INTO products (product_id, name, category, price, stock_quantity)
+            INSERT INTO products (product_id, product_name, category, price, stock_quantity)
             VALUES (%s, %s, %s, %s, %s)
             """,
             params=(1000, special_name, "Test", 100.0, 50),
@@ -261,18 +272,18 @@ class TestMySQLCDCPipeline:
         time.sleep(2)
 
         result = mysql_connection.execute_query(
-            "SELECT name FROM products WHERE product_id = 1000"
+            "SELECT product_name FROM products WHERE product_id = 1000"
         )
 
-        assert result[0]["name"] == special_name
-        assert "🎉" in result[0]["name"]
+        assert result[0]["product_name"] == special_name
+        assert "🎉" in result[0]["product_name"]
 
     def test_update_all_fields(self, mysql_connection, clean_products_table):
         """Test UPDATE that changes all fields."""
         # Insert
         mysql_connection.execute_query(
             """
-            INSERT INTO products (product_id, name, category, price, stock_quantity)
+            INSERT INTO products (product_id, product_name, category, price, stock_quantity)
             VALUES (1000, 'Before', 'Cat1', 100.0, 50)
             """,
             fetch=False,
@@ -284,7 +295,7 @@ class TestMySQLCDCPipeline:
         mysql_connection.execute_query(
             """
             UPDATE products
-            SET name = 'After', category = 'Cat2', price = 200.0, stock_quantity = 100
+            SET product_name = 'After', category = 'Cat2', price = 200.0, stock_quantity = 100
             WHERE product_id = 1000
             """,
             fetch=False,
@@ -296,7 +307,7 @@ class TestMySQLCDCPipeline:
             "SELECT * FROM products WHERE product_id = 1000"
         )
 
-        assert result[0]["name"] == "After"
+        assert result[0]["product_name"] == "After"
         assert result[0]["category"] == "Cat2"
         assert result[0]["price"] == 200.0
         assert result[0]["stock_quantity"] == 100
