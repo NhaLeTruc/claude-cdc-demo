@@ -3,13 +3,34 @@
 import pytest
 from unittest.mock import MagicMock, patch
 
+# Try to import Spark, skip tests if not available
+try:
+    import pyspark
+    from delta.tables import DeltaTable
+    SPARK_AVAILABLE = True
+except ImportError:
+    SPARK_AVAILABLE = False
+
+pytestmark = pytest.mark.skipif(
+    not SPARK_AVAILABLE,
+    reason="PySpark and Delta Lake not available for version tests"
+)
+
 
 class TestDeltaVersionManager:
     """Test suite for Delta table version tracking."""
 
-    def test_get_current_version(self):
+    @patch("src.cdc_pipelines.deltalake.version_tracker.DeltaTable.forPath")
+    def test_get_current_version(self, mock_delta_table):
         """Test retrieving current table version."""
         from src.cdc_pipelines.deltalake.version_tracker import DeltaVersionTracker
+
+        # Setup mock Delta table with history
+        mock_table = MagicMock()
+        mock_history = MagicMock()
+        mock_history.select.return_value.first.return_value = {"version": 5}
+        mock_table.history.return_value = mock_history
+        mock_delta_table.return_value = mock_table
 
         tracker = DeltaVersionTracker(table_path="/tmp/test_delta")
 
