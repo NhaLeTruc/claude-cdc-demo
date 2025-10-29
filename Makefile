@@ -22,7 +22,7 @@ start: ## Start all services via docker-compose
 
 stop: ## Stop all services
 	@echo "Stopping CDC demo services..."
-	@docker compose down
+	@docker compose down --remove-orphans --volumes
 
 restart: ## Restart all services
 	@make stop
