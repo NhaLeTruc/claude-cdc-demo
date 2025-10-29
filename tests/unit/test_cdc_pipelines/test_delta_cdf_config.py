@@ -2,6 +2,19 @@
 
 import pytest
 
+# Try to import Spark, skip tests if not available
+try:
+    import pyspark
+    from delta.tables import DeltaTable
+    SPARK_AVAILABLE = True
+except ImportError:
+    SPARK_AVAILABLE = False
+
+pytestmark = pytest.mark.skipif(
+    not SPARK_AVAILABLE,
+    reason="PySpark and Delta Lake not available for CDF tests"
+)
+
 
 class TestDeltaCDFConfig:
     """Test suite for DeltaLake CDF configuration."""
@@ -33,11 +46,17 @@ class TestDeltaCDFConfig:
     def test_alter_table_to_enable_cdf(self):
         """Test enabling CDF on existing table."""
         from src.cdc_pipelines.deltalake.table_manager import DeltaTableManager
+        from pyspark.sql.types import StructType, StructField, IntegerType
 
+        # Create table without CDF first
         manager = DeltaTableManager(
             table_path="/tmp/test_delta_alter_cdf",
             enable_cdf=False,
         )
+
+        # Create the table with a simple schema
+        schema = StructType([StructField("id", IntegerType(), False)])
+        manager.create_table(schema)
 
         # Enable CDF
         manager.enable_change_data_feed()
