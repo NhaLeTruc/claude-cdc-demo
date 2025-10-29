@@ -1,0 +1,453 @@
+# Spark with Delta Lake Configuration Schema
+# This file defines the configuration structure for Spark 3.5.0 with Delta Lake 3.3.2
+
+version: "1.0"
+description: |
+  Configuration schema for Apache Spark 3.5.0 with Delta Lake 3.3.2 integration.
+  Includes Change Data Feed (CDF) enablement and S3A configuration for MinIO.
+
+# Spark Session Configuration
+spark_config:
+  description: "Complete Spark session configuration for Delta Lake tests"
+
+  # Application Settings
+  application:
+    app_name:
+      type: string
+      default: "CDC-Demo-Tests"
+      description: "Spark application name"
+      required: false
+
+    master:
+      type: string
+      default: "spark://localhost:7077"
+      description: "Spark master URL (standalone mode)"
+      required: true
+      validation:
+        pattern: "^spark://[a-zA-Z0-9.-]+:[0-9]+$"
+
+  # Delta Lake Core Configuration
+  delta:
+    sql_extensions:
+      property: "spark.sql.extensions"
+      type: string
+      value: "io.delta.sql.DeltaSparkSessionExtension"
+      required: true
+      description: "Delta Spark session extension for SQL support"
+
+    catalog_implementation:
+      property: "spark.sql.catalog.spark_catalog"
+      type: string
+      value: "org.apache.spark.sql.delta.catalog.DeltaCatalog"
+      required: true
+      description: "Delta catalog implementation for Spark SQL"
+
+    packages:
+      property: "spark.jars.packages"
+      type: string
+      value: "io.delta:delta-spark_2.12:3.3.2"
+      required: true
+      description: "Maven coordinates for Delta Lake packages"
+      notes:
+        - "Scala 2.12 is required for Spark 3.5.0"
+        - "Version 3.3.2 is the latest compatible with Spark 3.5.0"
+        - "Alternative minimum version: 3.0.0"
+
+    warehouse_dir:
+      property: "spark.sql.warehouse.dir"
+      type: string
+      default: "/tmp/spark-warehouse"
+      required: false
+      description: "Local warehouse directory for managed tables"
+
+  # Change Data Feed (CDF) Configuration
+  change_data_feed:
+    enable_by_default:
+      property: "spark.databricks.delta.properties.defaults.enableChangeDataFeed"
+      type: boolean
+      default: true
+      required: false
+      description: "Enable Change Data Feed for all new Delta tables"
+      notes:
+        - "Can be overridden per table using TBLPROPERTIES"
+        - "Adds _change_type, _commit_version, _commit_timestamp columns"
+        - "Required for CDC use cases"
+
+    table_property:
+      property: "delta.enableChangeDataFeed"
+      type: boolean
+      scope: "table"
+      description: "Enable CDF on specific table via TBLPROPERTIES"
+      sql_examples:
+        - description: "Enable at table creation"
+          sql: |
+            CREATE TABLE events (
+              id BIGINT,
+              timestamp TIMESTAMP,
+              data STRING
+            ) USING DELTA
+            TBLPROPERTIES (delta.enableChangeDataFeed = true)
+        - description: "Enable on existing table"
+          sql: |
+            ALTER TABLE events
+            SET TBLPROPERTIES (delta.enableChangeDataFeed = true)
+
+    read_options:
+      readChangeFeed:
+        type: boolean
+        description: "Enable reading change data feed"
+        required: true
+        example: true
+
+      startingVersion:
+        type: integer
+        description: "Start version for reading changes (inclusive)"
+        required: false
+        example: 0
+
+      endingVersion:
+        type: integer
+        description: "End version for reading changes (inclusive)"
+        required: false
+        example: 10
+
+      startingTimestamp:
+        type: string
+        format: "YYYY-MM-DD HH:MM:SS"
+        description: "Start timestamp for reading changes"
+        required: false
+        example: "2025-01-01 00:00:00"
+
+      endingTimestamp:
+        type: string
+        format: "YYYY-MM-DD HH:MM:SS"
+        description: "End timestamp for reading changes"
+        required: false
+        example: "2025-01-02 00:00:00"
+
+    change_types:
+      - name: "insert"
+        description: "New row inserted into table"
+      - name: "update_preimage"
+        description: "Row values before update"
+      - name: "update_postimage"
+        description: "Row values after update"
+      - name: "delete"
+        description: "Deleted row values"
+
+  # S3A Configuration for MinIO
+  s3a:
+    endpoint:
+      property: "spark.hadoop.fs.s3a.endpoint"
+      type: string
+      default: "http://localhost:9000"
+      required: true
+      description: "MinIO S3-compatible endpoint URL"
+      notes:
+        - "Use 'http://minio:9000' when running in Docker network"
+        - "Use 'http://localhost:9000' when connecting from host"
+
+    access_key:
+      property: "spark.hadoop.fs.s3a.access.key"
+      type: string
+      default: "minioadmin"
+      required: true
+      description: "MinIO access key ID"
+      sensitive: true
+
+    secret_key:
+      property: "spark.hadoop.fs.s3a.secret.key"
+      type: string
+      default: "minioadmin"
+      required: true
+      description: "MinIO secret access key"
+      sensitive: true
+
+    path_style_access:
+      property: "spark.hadoop.fs.s3a.path.style.access"
+      type: boolean
+      default: true
+      required: true
+      description: "Enable path-style S3 access (required for MinIO)"
+
+    implementation:
+      property: "spark.hadoop.fs.s3a.impl"
+      type: string
+      value: "org.apache.hadoop.fs.s3a.S3AFileSystem"
+      required: true
+      description: "S3A filesystem implementation class"
+
+    connection_ssl_enabled:
+      property: "spark.hadoop.fs.s3a.connection.ssl.enabled"
+      type: boolean
+      default: false
+      required: false
+      description: "Enable SSL for S3 connections"
+
+  # Memory Configuration
+  memory:
+    driver_memory:
+      property: "spark.driver.memory"
+      type: string
+      default: "1g"
+      required: false
+      description: "Memory allocation for Spark driver"
+      validation:
+        pattern: "^[0-9]+[kmg]$"
+
+    executor_memory:
+      property: "spark.executor.memory"
+      type: string
+      default: "1g"
+      required: false
+      description: "Memory allocation for Spark executor"
+      validation:
+        pattern: "^[0-9]+[kmg]$"
+
+    driver_max_result_size:
+      property: "spark.driver.maxResultSize"
+      type: string
+      default: "1g"
+      required: false
+      description: "Maximum result size that can be collected to driver"
+
+  # Additional Performance Settings (Optional)
+  performance:
+    sql_adaptive_enabled:
+      property: "spark.sql.adaptive.enabled"
+      type: boolean
+      default: true
+      required: false
+      description: "Enable Adaptive Query Execution (AQE)"
+
+    sql_shuffle_partitions:
+      property: "spark.sql.shuffle.partitions"
+      type: integer
+      default: 200
+      required: false
+      description: "Number of partitions for shuffle operations"
+      notes:
+        - "Default 200 is too high for local testing"
+        - "Recommend 4-8 for local development"
+
+# Python Configuration Examples
+python_examples:
+  basic_spark_session:
+    description: "Create Spark session with Delta Lake support"
+    code: |
+      from pyspark.sql import SparkSession
+
+      spark = (
+          SparkSession.builder
+          .appName("CDC-Demo-Tests")
+          .master("spark://localhost:7077")
+          .config("spark.sql.extensions", "io.delta.sql.DeltaSparkSessionExtension")
+          .config("spark.sql.catalog.spark_catalog", "org.apache.spark.sql.delta.catalog.DeltaCatalog")
+          .config("spark.jars.packages", "io.delta:delta-spark_2.12:3.3.2")
+          .getOrCreate()
+      )
+
+  with_s3a_and_cdf:
+    description: "Spark session with S3A and CDF enabled"
+    code: |
+      from pyspark.sql import SparkSession
+
+      spark = (
+          SparkSession.builder
+          .appName("CDC-Demo-Tests")
+          .master("spark://localhost:7077")
+          # Delta Lake extensions
+          .config("spark.sql.extensions", "io.delta.sql.DeltaSparkSessionExtension")
+          .config("spark.sql.catalog.spark_catalog", "org.apache.spark.sql.delta.catalog.DeltaCatalog")
+          .config("spark.jars.packages", "io.delta:delta-spark_2.12:3.3.2")
+          # Change Data Feed
+          .config("spark.databricks.delta.properties.defaults.enableChangeDataFeed", "true")
+          # S3A for MinIO
+          .config("spark.hadoop.fs.s3a.endpoint", "http://localhost:9000")
+          .config("spark.hadoop.fs.s3a.access.key", "minioadmin")
+          .config("spark.hadoop.fs.s3a.secret.key", "minioadmin")
+          .config("spark.hadoop.fs.s3a.path.style.access", "true")
+          .config("spark.hadoop.fs.s3a.impl", "org.apache.hadoop.fs.s3a.S3AFileSystem")
+          # Memory
+          .config("spark.driver.memory", "1g")
+          .config("spark.executor.memory", "1g")
+          .getOrCreate()
+      )
+
+  read_change_feed:
+    description: "Read Delta Lake Change Data Feed"
+    code: |
+      # Read changes between versions
+      changes = (
+          spark.read.format("delta")
+          .option("readChangeFeed", "true")
+          .option("startingVersion", 0)
+          .option("endingVersion", 10)
+          .table("events")
+      )
+
+      # Show changes with metadata
+      changes.select(
+          "*",
+          "_change_type",
+          "_commit_version",
+          "_commit_timestamp"
+      ).show()
+
+  stream_change_feed:
+    description: "Stream Delta Lake Change Data Feed"
+    code: |
+      # Stream changes from version 0
+      changes_stream = (
+          spark.readStream.format("delta")
+          .option("readChangeFeed", "true")
+          .option("startingVersion", 0)
+          .table("events")
+      )
+
+      # Write to console
+      query = (
+          changes_stream
+          .writeStream
+          .format("console")
+          .option("truncate", "false")
+          .start()
+      )
+
+      query.awaitTermination()
+
+  config_dataclass:
+    description: "Configuration dataclass for tests"
+    code: |
+      from dataclasses import dataclass, field
+      from typing import Dict
+
+      @dataclass
+      class DeltaSparkConfig:
+          """Configuration for Delta Lake with Spark."""
+
+          app_name: str = "CDC-Demo-Tests"
+          master: str = "spark://localhost:7077"
+          delta_version: str = "3.3.2"
+          scala_version: str = "2.12"
+          enable_cdf: bool = True
+          s3_endpoint: str = "http://localhost:9000"
+          s3_access_key: str = "minioadmin"
+          s3_secret_key: str = "minioadmin"
+          driver_memory: str = "1g"
+          executor_memory: str = "1g"
+          extra_config: Dict[str, str] = field(default_factory=dict)
+
+          def to_spark_config(self) -> Dict[str, str]:
+              """Convert to Spark configuration dictionary."""
+              config = {
+                  "spark.sql.extensions": "io.delta.sql.DeltaSparkSessionExtension",
+                  "spark.sql.catalog.spark_catalog": "org.apache.spark.sql.delta.catalog.DeltaCatalog",
+                  "spark.jars.packages": f"io.delta:delta-spark_{self.scala_version}:{self.delta_version}",
+                  "spark.databricks.delta.properties.defaults.enableChangeDataFeed": str(self.enable_cdf).lower(),
+                  "spark.hadoop.fs.s3a.endpoint": self.s3_endpoint,
+                  "spark.hadoop.fs.s3a.access.key": self.s3_access_key,
+                  "spark.hadoop.fs.s3a.secret.key": self.s3_secret_key,
+                  "spark.hadoop.fs.s3a.path.style.access": "true",
+                  "spark.hadoop.fs.s3a.impl": "org.apache.hadoop.fs.s3a.S3AFileSystem",
+                  "spark.driver.memory": self.driver_memory,
+                  "spark.executor.memory": self.executor_memory,
+              }
+              config.update(self.extra_config)
+              return config
+
+# Dependency Requirements
+dependencies:
+  python:
+    pyspark:
+      version: "^3.5.0"
+      description: "Apache Spark Python API"
+      required: true
+
+    delta-spark:
+      version: "^3.3.2"
+      description: "Delta Lake Python API"
+      required: true
+      notes:
+        - "Minimum version: 3.0.0"
+        - "Recommended version: 3.3.2 (latest for Spark 3.5.0)"
+
+  java:
+    delta_core:
+      artifact_id: "delta-spark_2.12"
+      group_id: "io.delta"
+      version: "3.3.2"
+      description: "Delta Lake core library"
+
+# Testing Configuration
+test_configuration:
+  fixture_scope:
+    spark_session:
+      scope: session
+      description: "Spark session should be session-scoped (expensive to create)"
+      rationale: "Creating Spark session takes 5-10 seconds; reuse across tests"
+
+    delta_table_path:
+      scope: function
+      description: "Delta table paths should be function-scoped"
+      rationale: "Each test needs isolated table to prevent data pollution"
+
+  health_check:
+    spark_master_url: "http://localhost:8080"
+    expected_status: 200
+    timeout_seconds: 90
+    description: "Check Spark master web UI is accessible"
+
+  cleanup:
+    delta_tables:
+      method: "Delete directory after test"
+      implementation: "Use pytest tmp_path fixture for automatic cleanup"
+
+# Common Issues and Solutions
+troubleshooting:
+  - issue: "py4j.protocol.Py4JJavaError: org.apache.spark.sql.AnalysisException: Delta table not found"
+    solution: "Ensure Delta packages are loaded: check spark.jars.packages configuration"
+
+  - issue: "java.lang.NoClassDefFoundError: io/delta/sql/DeltaSparkSessionExtension"
+    solution: "Delta Lake extension not loaded. Verify spark.sql.extensions is set correctly"
+
+  - issue: "Change Data Feed not enabled on table"
+    solution: |
+      Enable CDF explicitly:
+      ALTER TABLE table_name SET TBLPROPERTIES (delta.enableChangeDataFeed = true)
+
+  - issue: "S3AFileSystem not found"
+    solution: "Ensure Hadoop AWS library is available. May need to add hadoop-aws to packages"
+
+  - issue: "Connection to MinIO fails from Spark"
+    solution: |
+      Check endpoint configuration:
+      - Use 'http://minio:9000' when running in Docker network
+      - Use 'http://localhost:9000' when connecting from host
+      - Verify path.style.access is set to true
+
+# Validation
+validation:
+  verify_delta_loaded:
+    description: "Check if Delta Lake is properly loaded"
+    code: |
+      # Should not raise exception if Delta is loaded
+      spark.sql("SELECT 1").show()
+
+      # Check if Delta catalog is configured
+      spark.conf.get("spark.sql.catalog.spark_catalog")
+
+  verify_cdf_enabled:
+    description: "Check if CDF is enabled by default"
+    code: |
+      is_enabled = spark.conf.get(
+          "spark.databricks.delta.properties.defaults.enableChangeDataFeed",
+          "false"
+      )
+      assert is_enabled.lower() == "true"
+
+  verify_s3_connectivity:
+    description: "Check if S3A can connect to MinIO"
+    code: |
+      # Try to list S3 bucket
+      spark.read.text("s3a://test-bucket/").show()

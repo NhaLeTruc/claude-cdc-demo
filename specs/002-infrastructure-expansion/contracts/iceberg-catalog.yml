@@ -1,0 +1,546 @@
+openapi: 3.0.3
+info:
+  title: Apache Iceberg REST Catalog API
+  description: |
+    REST API contract for Apache Iceberg REST Catalog service.
+    Used for table catalog operations and metadata management.
+  version: 1.0.0
+  contact:
+    name: Tabular (Iceberg REST Catalog)
+    url: https://github.com/tabular-io/iceberg-rest-image
+
+servers:
+  - url: http://localhost:8181
+    description: Local development environment
+
+tags:
+  - name: config
+    description: Catalog configuration endpoints
+  - name: namespaces
+    description: Namespace management
+  - name: tables
+    description: Table operations
+  - name: health
+    description: Health check endpoints
+
+paths:
+  /v1/config:
+    get:
+      summary: Get catalog configuration
+      description: Returns the catalog configuration including warehouse location and defaults
+      operationId: getCatalogConfig
+      tags:
+        - config
+      responses:
+        '200':
+          description: Catalog configuration
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CatalogConfig'
+              examples:
+                default:
+                  value:
+                    defaults:
+                      warehouse: s3://warehouse/
+                    overrides: {}
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /v1/namespaces:
+    get:
+      summary: List all namespaces
+      description: Returns a list of all namespaces in the catalog
+      operationId: listNamespaces
+      tags:
+        - namespaces
+      responses:
+        '200':
+          description: List of namespaces
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/NamespaceList'
+        '500':
+          description: Internal server error
+
+    post:
+      summary: Create a namespace
+      description: Creates a new namespace in the catalog
+      operationId: createNamespace
+      tags:
+        - namespaces
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateNamespaceRequest'
+            examples:
+              simple:
+                value:
+                  namespace:
+                    - test_db
+                  properties:
+                    owner: testuser
+      responses:
+        '200':
+          description: Namespace created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/NamespaceResponse'
+        '409':
+          description: Namespace already exists
+        '500':
+          description: Internal server error
+
+  /v1/namespaces/{namespace}:
+    get:
+      summary: Get namespace metadata
+      description: Returns metadata for a specific namespace
+      operationId: getNamespace
+      tags:
+        - namespaces
+      parameters:
+        - name: namespace
+          in: path
+          required: true
+          schema:
+            type: string
+          description: Namespace identifier
+      responses:
+        '200':
+          description: Namespace metadata
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/NamespaceResponse'
+        '404':
+          description: Namespace not found
+        '500':
+          description: Internal server error
+
+    delete:
+      summary: Drop namespace
+      description: Deletes a namespace from the catalog
+      operationId: dropNamespace
+      tags:
+        - namespaces
+      parameters:
+        - name: namespace
+          in: path
+          required: true
+          schema:
+            type: string
+          description: Namespace identifier
+      responses:
+        '204':
+          description: Namespace deleted
+        '404':
+          description: Namespace not found
+        '409':
+          description: Namespace not empty
+        '500':
+          description: Internal server error
+
+  /v1/namespaces/{namespace}/tables:
+    get:
+      summary: List tables in namespace
+      description: Returns a list of all tables in the specified namespace
+      operationId: listTables
+      tags:
+        - tables
+      parameters:
+        - name: namespace
+          in: path
+          required: true
+          schema:
+            type: string
+          description: Namespace identifier
+      responses:
+        '200':
+          description: List of tables
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TableList'
+        '404':
+          description: Namespace not found
+        '500':
+          description: Internal server error
+
+    post:
+      summary: Create a table
+      description: Creates a new table in the specified namespace
+      operationId: createTable
+      tags:
+        - tables
+      parameters:
+        - name: namespace
+          in: path
+          required: true
+          schema:
+            type: string
+          description: Namespace identifier
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateTableRequest'
+      responses:
+        '200':
+          description: Table created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TableMetadata'
+        '409':
+          description: Table already exists
+        '500':
+          description: Internal server error
+
+  /v1/namespaces/{namespace}/tables/{table}:
+    get:
+      summary: Get table metadata
+      description: Returns metadata for a specific table
+      operationId: getTable
+      tags:
+        - tables
+      parameters:
+        - name: namespace
+          in: path
+          required: true
+          schema:
+            type: string
+          description: Namespace identifier
+        - name: table
+          in: path
+          required: true
+          schema:
+            type: string
+          description: Table name
+      responses:
+        '200':
+          description: Table metadata
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TableMetadata'
+        '404':
+          description: Table not found
+        '500':
+          description: Internal server error
+
+    delete:
+      summary: Drop table
+      description: Deletes a table from the catalog
+      operationId: dropTable
+      tags:
+        - tables
+      parameters:
+        - name: namespace
+          in: path
+          required: true
+          schema:
+            type: string
+          description: Namespace identifier
+        - name: table
+          in: path
+          required: true
+          schema:
+            type: string
+          description: Table name
+        - name: purgeRequested
+          in: query
+          required: false
+          schema:
+            type: boolean
+            default: false
+          description: If true, delete all table data and metadata
+      responses:
+        '204':
+          description: Table deleted
+        '404':
+          description: Table not found
+        '500':
+          description: Internal server error
+
+components:
+  schemas:
+    CatalogConfig:
+      type: object
+      properties:
+        defaults:
+          type: object
+          additionalProperties:
+            type: string
+          description: Default configuration values
+          example:
+            warehouse: s3://warehouse/
+        overrides:
+          type: object
+          additionalProperties:
+            type: string
+          description: Configuration overrides
+      required:
+        - defaults
+
+    NamespaceList:
+      type: object
+      properties:
+        namespaces:
+          type: array
+          items:
+            type: array
+            items:
+              type: string
+          description: List of namespace identifiers
+          example:
+            - ["test_db"]
+            - ["production", "analytics"]
+
+    CreateNamespaceRequest:
+      type: object
+      properties:
+        namespace:
+          type: array
+          items:
+            type: string
+          description: Namespace identifier (can be multi-level)
+          example: ["test_db"]
+        properties:
+          type: object
+          additionalProperties:
+            type: string
+          description: Namespace properties
+          example:
+            owner: testuser
+            location: s3://warehouse/test_db
+      required:
+        - namespace
+
+    NamespaceResponse:
+      type: object
+      properties:
+        namespace:
+          type: array
+          items:
+            type: string
+          description: Namespace identifier
+        properties:
+          type: object
+          additionalProperties:
+            type: string
+          description: Namespace properties
+      required:
+        - namespace
+
+    TableList:
+      type: object
+      properties:
+        identifiers:
+          type: array
+          items:
+            $ref: '#/components/schemas/TableIdentifier'
+          description: List of table identifiers
+
+    TableIdentifier:
+      type: object
+      properties:
+        namespace:
+          type: array
+          items:
+            type: string
+          description: Namespace containing the table
+          example: ["test_db"]
+        name:
+          type: string
+          description: Table name
+          example: users
+      required:
+        - namespace
+        - name
+
+    CreateTableRequest:
+      type: object
+      properties:
+        name:
+          type: string
+          description: Table name
+          example: users
+        schema:
+          $ref: '#/components/schemas/IcebergSchema'
+        partition-spec:
+          type: object
+          description: Partition specification (optional)
+        write-order:
+          type: object
+          description: Write order specification (optional)
+        properties:
+          type: object
+          additionalProperties:
+            type: string
+          description: Table properties
+      required:
+        - name
+        - schema
+
+    IcebergSchema:
+      type: object
+      properties:
+        type:
+          type: string
+          enum: [struct]
+          description: Schema type (always 'struct' for table schema)
+        schema-id:
+          type: integer
+          description: Unique schema identifier
+          example: 0
+        fields:
+          type: array
+          items:
+            $ref: '#/components/schemas/IcebergField'
+          description: List of table fields
+      required:
+        - type
+        - fields
+
+    IcebergField:
+      type: object
+      properties:
+        id:
+          type: integer
+          description: Unique field identifier
+          example: 1
+        name:
+          type: string
+          description: Field name
+          example: id
+        required:
+          type: boolean
+          description: Whether field is required
+          example: true
+        type:
+          oneOf:
+            - type: string
+              description: Primitive type (long, string, timestamp, etc.)
+              example: long
+            - type: object
+              description: Nested or complex type
+      required:
+        - id
+        - name
+        - required
+        - type
+
+    TableMetadata:
+      type: object
+      properties:
+        metadata-location:
+          type: string
+          description: S3 location of table metadata
+          example: s3://warehouse/test_db/users/metadata/00000-abc123.metadata.json
+        metadata:
+          type: object
+          description: Full table metadata
+          additionalProperties: true
+        config:
+          type: object
+          additionalProperties:
+            type: string
+          description: Table configuration
+
+    ErrorResponse:
+      type: object
+      properties:
+        error:
+          type: object
+          properties:
+            message:
+              type: string
+              description: Error message
+            type:
+              type: string
+              description: Error type
+            code:
+              type: integer
+              description: HTTP status code
+      required:
+        - error
+
+  securitySchemes:
+    basicAuth:
+      type: http
+      scheme: basic
+      description: Basic HTTP authentication (optional)
+
+# Configuration Schema for Docker Compose
+x-docker-compose-config:
+  environment:
+    AWS_ACCESS_KEY_ID:
+      type: string
+      required: true
+      description: MinIO access key ID
+      example: minioadmin
+
+    AWS_SECRET_ACCESS_KEY:
+      type: string
+      required: true
+      description: MinIO secret access key
+      example: minioadmin
+
+    AWS_REGION:
+      type: string
+      required: false
+      default: us-east-1
+      description: AWS region for S3 operations
+
+    CATALOG_WAREHOUSE:
+      type: string
+      required: true
+      description: S3 warehouse path
+      example: s3://warehouse/
+
+    CATALOG_IO__IMPL:
+      type: string
+      required: true
+      description: Iceberg FileIO implementation class
+      example: org.apache.iceberg.aws.s3.S3FileIO
+
+    CATALOG_S3_ENDPOINT:
+      type: string
+      required: true
+      description: MinIO S3 endpoint URL (container network)
+      example: http://minio:9000
+
+    CATALOG_S3_PATH__STYLE__ACCESS:
+      type: boolean
+      required: true
+      description: Enable path-style S3 access
+      example: true
+
+  healthcheck:
+    test: ["CMD", "curl", "-f", "http://localhost:8181/v1/config"]
+    interval: 10s
+    timeout: 5s
+    retries: 5
+    start_period: 10s
+
+  ports:
+    - container: 8181
+      host: 8181
+      protocol: tcp
+      description: Iceberg REST API
+
+  networks:
+    - cdc-network
+
+  depends_on:
+    minio:
+      condition: service_healthy
