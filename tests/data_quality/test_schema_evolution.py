@@ -512,7 +512,7 @@ class TestTypeChangeScenario:
         price = cursor.fetchone()[0]
 
         assert isinstance(price, int)
-        assert price == 99  # Decimal places truncated
+        assert price == 100  # Decimal places rounded (99.99 -> 100)
 
     def test_type_change_cdc_event_structure(self, mock_cdc_consumer):
         """Test CDC event structure after type change."""
@@ -691,12 +691,15 @@ class TestComplexEvolutionScenarios:
         """Test multiple schema changes in a single transaction."""
         cursor = setup_test_table
 
-        # Multiple changes
+        # Multiple changes (RENAME must be separate in PostgreSQL)
         cursor.execute("""
             ALTER TABLE schema_evolution_test
             ADD COLUMN email VARCHAR(255),
             DROP COLUMN description,
-            ALTER COLUMN status TYPE VARCHAR(100),
+            ALTER COLUMN status TYPE VARCHAR(100)
+        """)
+        cursor.execute("""
+            ALTER TABLE schema_evolution_test
             RENAME COLUMN name TO display_name
         """)
         postgres_connection.commit()
