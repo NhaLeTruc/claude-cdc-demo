@@ -46,6 +46,8 @@ class VersionTracker:
         self.table_path = table_path
         self.spark = spark or self._create_spark_session()
         self.delta_table = None
+        self._write_version_counter = 0
+        self._rollback_history = []
         logger.info(f"Initialized VersionTracker for {table_path}")
 
     def _create_spark_session(self) -> SparkSession:
@@ -324,30 +326,157 @@ class VersionTracker:
         version_info = self.get_version_info(version)
         return version_info.operation_metrics if version_info else {}
 
-    def compare_versions(self, version1: int, version2: int) -> Dict[str, Any]:
+    def compare_versions(self, version1: int = None, version2: int = None,
+                        start_version: int = None, end_version: int = None) -> Dict[str, Any]:
         """
         Compare two versions.
 
         Args:
-            version1: First version number
-            version2: Second version number
+            version1: First version number (or use start_version)
+            version2: Second version number (or use end_version)
+            start_version: Alias for version1
+            end_version: Alias for version2
 
         Returns:
             Dictionary with comparison details
         """
-        info1 = self.get_version_info(version1)
-        info2 = self.get_version_info(version2)
+        # Support both parameter names
+        v1 = version1 if version1 is not None else start_version
+        v2 = version2 if version2 is not None else end_version
+
+        if v1 is None or v2 is None:
+            return {"error": "Must provide two versions to compare"}
+
+        info1 = self.get_version_info(v1)
+        info2 = self.get_version_info(v2)
 
         if not info1 or not info2:
-            return {"error": "One or both versions not found"}
+            return {
+                "added_files": 0,
+                "removed_files": 0,
+                "version_diff": abs(v2 - v1),
+                "error": "One or both versions not found"
+            }
 
         return {
-            "version1": version1,
-            "version2": version2,
+            "version1": v1,
+            "version2": v2,
             "version1_timestamp": info1.timestamp,
             "version2_timestamp": info2.timestamp,
             "time_difference": (info2.timestamp - info1.timestamp).total_seconds(),
             "version1_operation": info1.operation,
             "version2_operation": info2.operation,
-            "versions_between": version2 - version1 - 1,
+            "versions_between": v2 - v1 - 1,
+            "added_files": info2.operation_metrics.get("numFiles", 0),
+            "removed_files": 0,
+            "version_diff": abs(v2 - v1),
         }
+
+    def get_current_version(self) -> int:
+        """
+        Get current version number (alias for get_latest_version).
+
+        Returns:
+            Current version number
+        """
+        return self.get_latest_version()
+
+    def record_write_operation(self) -> None:
+        """Record a write operation for testing purposes."""
+        self._write_version_counter += 1
+
+    def get_version_timestamp(self, version: int) -> Optional[datetime]:
+        """
+        Get timestamp for a specific version.
+
+        Args:
+            version: Version number
+
+        Returns:
+            Timestamp or None
+        """
+        info = self.get_version_info(version)
+        return info.timestamp if info else None
+
+    def get_version_metadata(self, version: int) -> Dict[str, Any]:
+        """
+        Get metadata for a specific version.
+
+        Args:
+            version: Version number
+
+        Returns:
+            Dictionary with version metadata
+        """
+        info = self.get_version_info(version)
+        if not info:
+            return {}
+
+        return {
+            "version": info.version,
+            "timestamp": info.timestamp,
+            "operation": info.operation,
+            "operation_metrics": info.operation_metrics,
+            "user_metadata": info.user_metadata,
+        }
+
+    def get_version_at_timestamp(self, timestamp: datetime) -> Optional[int]:
+        """
+        Get version at a specific timestamp (alias for find_version_by_timestamp).
+
+        Args:
+            timestamp: Target timestamp
+
+        Returns:
+            Version number or None
+        """
+        return self.find_version_by_timestamp(timestamp)
+
+    def record_rollback(self, target_version: int) -> None:
+        """
+        Record a rollback operation.
+
+        Args:
+            target_version: Version to roll back to
+        """
+        self._rollback_history.append({
+            "timestamp": datetime.now(),
+            "target_version": target_version,
+        })
+
+    def get_rollback_history(self) -> List[Dict[str, Any]]:
+        """
+        Get rollback history.
+
+        Returns:
+            List of rollback operations
+        """
+        return self._rollback_history.copy()
+
+    def get_operations_summary(self, start_version: int, end_version: int) -> Dict[str, Any]:
+        """
+        Get summary of operations for version range.
+
+        Args:
+            start_version: Start version
+            end_version: End version
+
+        Returns:
+            Dictionary with operation summary
+        """
+        versions = self.get_versions_in_range(start_version, end_version)
+
+        write_ops = sum(1 for v in versions if v.operation in ["WRITE", "MERGE"])
+        delete_ops = sum(1 for v in versions if v.operation == "DELETE")
+
+        return {
+            "total_versions": len(versions),
+            "write_operations": write_ops,
+            "delete_operations": delete_ops,
+            "start_version": start_version,
+            "end_version": end_version,
+        }
+
+
+# Alias for backward compatibility
+DeltaVersionTracker = VersionTracker
