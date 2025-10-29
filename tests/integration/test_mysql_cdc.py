@@ -20,11 +20,11 @@ def mysql_connection():
 
     settings = get_settings()
     manager = MySQLConnectionManager(
-        host=settings.mysql_host,
-        port=settings.mysql_port,
-        user=settings.mysql_user,
-        password=settings.mysql_password,
-        database=settings.mysql_database,
+        host=settings.mysql.host,
+        port=settings.mysql.port,
+        user=settings.mysql.user,
+        password=settings.mysql.password,
+        database=settings.mysql.db,
     )
 
     try:
@@ -89,9 +89,9 @@ class TestMySQLCDCPipeline:
 
         assert len(result) == 2
         assert result[0]["product_id"] == 1000
-        assert result[0]["price"] == 89.99  # Updated price
+        assert float(result[0]["price"]) == 89.99  # Updated price
         assert result[1]["product_id"] == 1001
-        assert result[1]["price"] == 149.99
+        assert float(result[1]["price"]) == 149.99
 
     def test_bulk_insert_100_records(self, mysql_connection, clean_products_table):
         """Test CDC captures bulk insert of 100+ records."""
@@ -162,19 +162,38 @@ class TestMySQLCDCPipeline:
 
     def test_rollback_handling(self, mysql_connection, clean_products_table):
         """Test CDC handles rolled back transactions."""
-        queries = [
-            "START TRANSACTION",
-            """
+        # First ensure the record doesn't exist
+        mysql_connection.execute_query(
+            "DELETE FROM products WHERE product_id = 1000",
+            fetch=False,
+        )
+
+        # Verify it's gone before we start the test
+        pre_check = mysql_connection.execute_query(
+            "SELECT COUNT(*) as count FROM products WHERE product_id = 1000"
+        )
+        if pre_check[0]["count"] > 0:
+            # Force cleanup if needed
+            mysql_connection.execute_query(
+                "DELETE FROM products WHERE product_id = 1000",
+                fetch=False,
+            )
+
+        # Now test rollback behavior
+        conn = mysql_connection.get_connection()
+        cursor = conn.cursor()
+
+        # Start explicit transaction with autocommit off
+        cursor.execute("SET autocommit=0")
+        cursor.execute("START TRANSACTION")
+        cursor.execute("""
             INSERT INTO products (product_id, product_name, category, price, stock_quantity)
             VALUES (1000, 'Rollback Test', 'Test', 100.0, 50)
-            """,
-            "ROLLBACK",
-        ]
+        """)
+        cursor.execute("ROLLBACK")
+        cursor.execute("SET autocommit=1")
 
-        for query in queries:
-            mysql_connection.execute_query(query, fetch=False)
-
-        time.sleep(2)
+        time.sleep(1)
 
         # Verify record was NOT inserted
         result = mysql_connection.execute_query(
@@ -201,7 +220,7 @@ class TestMySQLCDCPipeline:
 
         assert result[0]["category"] is None
         assert result[0]["description"] is None
-        assert result[0]["price"] == 100.0  # Non-null value
+        assert float(result[0]["price"]) == 100.0  # Non-null value
 
     def test_concurrent_updates(self, mysql_connection, clean_products_table):
         """Test CDC handles concurrent updates to same record."""
@@ -309,5 +328,5 @@ class TestMySQLCDCPipeline:
 
         assert result[0]["product_name"] == "After"
         assert result[0]["category"] == "Cat2"
-        assert result[0]["price"] == 200.0
+        assert float(result[0]["price"]) == 200.0
         assert result[0]["stock_quantity"] == 100

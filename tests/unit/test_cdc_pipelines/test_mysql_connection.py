@@ -41,11 +41,13 @@ class TestMySQLConnectionManager:
     def test_connection_retry_on_failure(self, mock_mysql_connection, mysql_credentials):
         """Test connection retry logic on failure."""
         from src.cdc_pipelines.mysql.connection import MySQLConnectionManager
+        import mysql.connector
 
         # First call raises exception, second succeeds
         mock_conn = MagicMock()
+        mock_conn.is_connected.return_value = True
         mock_mysql_connection.side_effect = [
-            Exception("Connection failed"),
+            mysql.connector.Error("Connection failed"),
             mock_conn,
         ]
 
