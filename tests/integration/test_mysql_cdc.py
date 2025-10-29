@@ -43,7 +43,6 @@ def clean_products_table(mysql_connection):
 
 
 @pytest.mark.integration
-@pytest.mark.skip(reason="Requires running MySQL and Debezium infrastructure")
 class TestMySQLCDCPipeline:
     """Integration tests for MySQL CDC pipeline."""
 

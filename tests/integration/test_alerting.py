@@ -20,10 +20,6 @@ def prometheus_url():
 
 
 @pytest.mark.integration
-@pytest.mark.skipif(
-    reason="Requires Alertmanager and Prometheus running",
-    condition=True,
-)
 class TestAlertDelivery:
     """Integration tests for alert delivery mechanisms."""
 
