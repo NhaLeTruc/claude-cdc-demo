@@ -3,6 +3,7 @@
 Auto-generated from all feature plans. Last updated: 2025-10-27
 
 ## Active Technologies
+- Python 3.11+ (existing), Docker Compose v2+ (001-test-infrastructure)
 
 - Python 3.11+ (for orchestration, data generation, validation scripts) (001-cdc-demo)
 
@@ -22,6 +23,7 @@ cd src [ONLY COMMANDS FOR ACTIVE TECHNOLOGIES][ONLY COMMANDS FOR ACTIVE TECHNOLO
 Python 3.11+ (for orchestration, data generation, validation scripts): Follow standard conventions
 
 ## Recent Changes
+- 001-test-infrastructure: Added Python 3.11+ (existing), Docker Compose v2+
 
 - 001-cdc-demo: Added Python 3.11+ (for orchestration, data generation, validation scripts)
 

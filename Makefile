@@ -64,6 +64,35 @@ test-dq: ## Run data quality tests only
 test-coverage: ## Run tests with coverage report
 	@poetry run pytest --cov=src --cov-report=html --cov-report=term-missing
 
+# Test Infrastructure Management
+start-test-infra: ## Start test infrastructure (Spark, AlertManager)
+	@echo "Starting test infrastructure..."
+	@docker compose up -d spark alertmanager
+	@echo "Waiting for services to be healthy..."
+	@sleep 15
+	@docker compose ps spark alertmanager
+	@echo ""
+	@echo "Test infrastructure ready:"
+	@echo "  - Spark UI: http://localhost:8080"
+	@echo "  - AlertManager: http://localhost:9093"
+
+stop-test-infra: ## Stop test infrastructure services
+	@echo "Stopping test infrastructure..."
+	@docker compose stop spark alertmanager
+
+verify-test-infra: ## Verify test infrastructure health
+	@echo "Checking Spark..."
+	@curl -f http://localhost:8080 > /dev/null 2>&1 && echo "✓ Spark Master: http://localhost:8080" || echo "✗ Spark Master not reachable"
+	@echo "Checking AlertManager..."
+	@curl -f http://localhost:9093/-/healthy > /dev/null 2>&1 && echo "✓ AlertManager: http://localhost:9093" || echo "✗ AlertManager not reachable"
+	@echo "Checking Prometheus-AlertManager integration..."
+	@curl -s http://localhost:9090/api/v1/alertmanagers 2>/dev/null | grep -q "alertmanager:9093" && echo "✓ Prometheus connected to AlertManager" || echo "✗ Prometheus not connected"
+
+clean-delta-tables: ## Clean Delta Lake test artifacts
+	@echo "Cleaning Delta Lake test tables..."
+	@rm -rf data/delta-tables/test_* || true
+	@echo "Delta Lake test artifacts cleaned"
+
 validate: ## Run validation checks (data integrity, CDC lag)
 	@poetry run cdc-demo validate all
 

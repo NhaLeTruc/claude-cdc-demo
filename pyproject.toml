@@ -13,9 +13,10 @@ kafka-python = "^2.0.2"
 # Database Drivers
 psycopg2-binary = "^2.9.9"
 pymysql = "^1.1.0"
+mysql-connector-python = "^8.0.33"
 # Lakehouse
-pyspark = "^3.4.0"
-delta-spark = "^2.4.0"
+pyspark = "^3.5.0"
+delta-spark = "^3.0.0"
 pyiceberg = "^0.5.0"
 pyarrow = "^14.0.0"
 # Data Generation
