@@ -465,9 +465,84 @@ def extract_debezium_payload(cdc_event: Dict[str, Any]) -> Optional[Dict[str, An
     Returns:
         Extracted payload or None
     """
-    operation = cdc_event.get("op", "u")
+    # Handle nested payload structure
+    if "payload" in cdc_event:
+        payload = cdc_event["payload"]
+    else:
+        payload = cdc_event
+
+    operation = payload.get("op", "u")
 
     if operation == "d":
-        return cdc_event.get("before")
+        return payload.get("before")
     else:
-        return cdc_event.get("after")
+        return payload.get("after")
+
+
+def cast_field_types(data: Dict[str, Any]) -> Dict[str, Any]:
+    """
+    Cast field types from strings to appropriate types.
+
+    Args:
+        data: Input data with potentially string-typed values
+
+    Returns:
+        Data with properly typed values
+    """
+    result = data.copy()
+
+    # Cast customer_id to int
+    if "customer_id" in result and isinstance(result["customer_id"], str):
+        try:
+            result["customer_id"] = int(result["customer_id"])
+        except (ValueError, TypeError):
+            pass
+
+    # Cast lifetime_value to float
+    if "lifetime_value" in result and isinstance(result["lifetime_value"], str):
+        try:
+            result["lifetime_value"] = float(result["lifetime_value"])
+        except (ValueError, TypeError):
+            pass
+
+    # Cast is_active to bool
+    if "is_active" in result and isinstance(result["is_active"], str):
+        result["is_active"] = result["is_active"].lower() in ("true", "1", "yes")
+
+    return result
+
+
+def transform_batch(records: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    """
+    Transform a batch of customer records.
+
+    Args:
+        records: List of customer records
+
+    Returns:
+        List of transformed records
+    """
+    return [transform_customer(record) for record in records]
+
+
+def apply_custom_rules(data: Dict[str, Any]) -> Dict[str, Any]:
+    """
+    Apply custom business rules to data.
+
+    Args:
+        data: Input data
+
+    Returns:
+        Data with custom rules applied
+    """
+    result = data.copy()
+
+    # Normalize customer_tier to title case
+    if "customer_tier" in result and result["customer_tier"]:
+        result["customer_tier"] = result["customer_tier"].title()
+
+    # Normalize email to lowercase and trim
+    if "email" in result and result["email"]:
+        result["email"] = result["email"].strip().lower()
+
+    return result
