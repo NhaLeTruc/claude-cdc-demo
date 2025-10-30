@@ -22,6 +22,18 @@ try:
 except ImportError:
     SPARK_AVAILABLE = False
 
+# Try to import PyIceberg for Iceberg fixtures
+try:
+    from pyiceberg.catalog import Catalog
+    from tests.fixtures.iceberg_catalog import (
+        IcebergCatalogManager,
+        setup_test_namespace,
+        cleanup_test_namespace,
+    )
+    ICEBERG_AVAILABLE = True
+except ImportError:
+    ICEBERG_AVAILABLE = False
+
 
 @pytest.fixture(scope="session")
 def postgres_credentials():
@@ -67,28 +79,39 @@ def mysql_connection(mysql_credentials):
 @pytest.fixture(scope="session")
 def spark_session():
     """
-    Create a Spark session for testing Delta Lake operations.
+    Create a Spark session for testing Delta Lake operations with CDF support.
     Session-scoped to reuse across tests for performance.
+    Uses DeltaSparkManager for proper configuration.
     """
     if not SPARK_AVAILABLE:
         pytest.skip("PySpark not available")
 
-    spark = (
-        SparkSession.builder
-        .appName("CDC-Demo-Tests")
-        .master("spark://localhost:7077")
-        .config("spark.sql.extensions", "io.delta.sql.DeltaSparkSessionExtension")
-        .config("spark.sql.catalog.spark_catalog", "org.apache.spark.sql.delta.catalog.DeltaCatalog")
-        .config("spark.jars.packages", "io.delta:delta-spark_2.12:3.0.0")
-        .config("spark.sql.warehouse.dir", "/tmp/spark-warehouse")
-        .config("spark.driver.memory", "1g")
-        .config("spark.executor.memory", "1g")
-        .getOrCreate()
-    )
+    from tests.fixtures.delta_spark import DeltaSparkManager
+
+    manager = DeltaSparkManager()
+    spark = manager.get_spark_session()
 
     yield spark
 
-    spark.stop()
+    manager.stop_spark_session()
+
+
+@pytest.fixture(scope="session")
+def delta_spark():
+    """
+    Provide DeltaSparkManager for Delta Lake testing.
+    Session-scoped for reuse across tests.
+    """
+    if not SPARK_AVAILABLE:
+        pytest.skip("PySpark not available")
+
+    from tests.fixtures.delta_spark import DeltaSparkManager
+
+    manager = DeltaSparkManager()
+
+    yield manager
+
+    manager.stop_spark_session()
 
 
 @pytest.fixture
@@ -176,3 +199,64 @@ def alertmanager_client():
 
     # Cleanup
     client.cleanup()
+
+
+# Iceberg Catalog Fixtures
+@pytest.fixture(scope="session")
+def iceberg_catalog():
+    """
+    Create an Iceberg catalog for testing.
+    Session-scoped to reuse across tests for performance.
+    """
+    if not ICEBERG_AVAILABLE:
+        pytest.skip("PyIceberg not available")
+
+    manager = IcebergCatalogManager()
+    catalog = manager.get_catalog()
+
+    yield catalog
+
+    # No cleanup needed for session-scoped catalog
+
+
+@pytest.fixture
+def iceberg_namespace(iceberg_catalog):
+    """
+    Provide a clean Iceberg namespace for each test.
+    Creates a unique namespace and cleans it up after the test.
+    """
+    if not ICEBERG_AVAILABLE:
+        pytest.skip("PyIceberg not available")
+
+    # Create unique namespace for this test
+    namespace = f"test_{uuid.uuid4().hex[:8]}"
+    manager = IcebergCatalogManager()
+
+    # Create namespace
+    manager.create_namespace(namespace, catalog=iceberg_catalog)
+
+    yield namespace
+
+    # Cleanup: drop all tables and namespace
+    try:
+        manager.cleanup_namespace(namespace, catalog=iceberg_catalog)
+    except Exception:
+        pass  # Ignore cleanup errors
+
+
+@pytest.fixture(scope="session")
+def iceberg_test_namespace():
+    """
+    Shared test namespace for Iceberg testing.
+    Session-scoped for tests that can share a namespace.
+    """
+    if not ICEBERG_AVAILABLE:
+        pytest.skip("PyIceberg not available")
+
+    namespace = "cdc_test"
+    catalog, ns = setup_test_namespace(namespace)
+
+    yield ns
+
+    # Cleanup after all tests
+    cleanup_test_namespace(namespace)

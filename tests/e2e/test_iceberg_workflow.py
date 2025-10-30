@@ -4,11 +4,18 @@ import pytest
 from datetime import datetime, timedelta
 import time
 
+# Check PyIceberg availability
+try:
+    import pyiceberg
+    PYICEBERG_AVAILABLE = True
+except ImportError:
+    PYICEBERG_AVAILABLE = False
+
 
 @pytest.mark.e2e
 @pytest.mark.skipif(
-    reason="Requires full Iceberg infrastructure setup",
-    condition=True,
+    not PYICEBERG_AVAILABLE,
+    reason="Requires full Iceberg infrastructure setup"
 )
 class TestIcebergCDCWorkflow:
     """End-to-end tests for complete Iceberg CDC workflow."""
