@@ -72,7 +72,8 @@ Once running, access:
 
 - **Grafana Dashboards**: http://localhost:3000 (admin/admin)
 - **Prometheus**: http://localhost:9090
-- **Kafka UI**: http://localhost:9000
+- **MinIO Console**: http://localhost:9001 (minioadmin/minioadmin)
+- **Iceberg REST Catalog**: http://localhost:8181
 - **PostgreSQL**: localhost:5432 (postgres/postgres)
 - **MySQL**: localhost:3306 (root/mysql)
 
@@ -186,6 +187,88 @@ Notifications can be sent via:
 - Webhooks
 
 See [Alerting Configuration](docker/observability/alertmanager.yml).
+
+## 🏗️ Infrastructure Services
+
+### Core Services
+
+| Service | Port | Purpose | Documentation |
+|---------|------|---------|---------------|
+| **PostgreSQL** | 5432 | Source database with logical replication | [Setup](docker/postgres/) |
+| **MySQL** | 3306 | Source database with binlog enabled | [Setup](docker/mysql/) |
+| **Apache Kafka** | 29092 | Message streaming platform | [Setup](docker/kafka/) |
+| **Debezium** | 8083 | CDC connector framework | [API](http://localhost:8083) |
+| **MinIO** | 9000, 9001 | S3-compatible object storage | [Console](http://localhost:9001) |
+| **Iceberg REST Catalog** | 8181 | Table metadata management | [Guide](docs/infrastructure/iceberg-setup.md) |
+| **Apache Spark** | 7077, 8080 | Data processing engine | [UI](http://localhost:8080) |
+| **Prometheus** | 9090 | Metrics collection | [UI](http://localhost:9090) |
+| **Grafana** | 3000 | Visualization and dashboards | [UI](http://localhost:3000) |
+| **Alertmanager** | 9093 | Alert routing and notification | [UI](http://localhost:9093) |
+
+### Iceberg Testing Infrastructure
+
+The Apache Iceberg infrastructure enables snapshot-based incremental CDC testing:
+
+**Components**:
+- **Iceberg REST Catalog** (port 8181) - Manages table metadata and transactions
+- **MinIO** (port 9000) - Stores Iceberg table data and metadata files
+- **PyIceberg** (v0.10.0+) - Python library for table operations
+
+**Key Features**:
+- ✅ Namespace and table management
+- ✅ Snapshot-based incremental reads
+- ✅ Schema evolution support
+- ✅ ACID transactions
+- ✅ Time travel queries
+
+**Quick Validation**:
+```bash
+# Check Iceberg catalog health
+curl http://localhost:8181/v1/config
+
+# Run Iceberg infrastructure tests
+poetry run pytest tests/integration/test_infrastructure.py::TestIcebergInfrastructure -v
+
+# Run all Iceberg tests (48 tests)
+poetry run pytest tests/unit/test_cdc_pipelines/test_iceberg_*.py \
+                 tests/integration/test_iceberg_cdc.py \
+                 tests/e2e/test_iceberg_workflow.py -v
+```
+
+**Documentation**: See [Iceberg Setup Guide](docs/infrastructure/iceberg-setup.md) for detailed configuration, fixtures, and troubleshooting.
+
+### Delta Lake Testing Infrastructure
+
+The Delta Lake infrastructure enables Change Data Feed (CDF) testing with Apache Spark:
+
+**Components**:
+- **Apache Spark** (ports 7077, 8080, 4040) - Distributed processing engine
+- **Delta Lake 3.3.2** - Table format with ACID transactions and CDF
+- **MinIO** (port 9000) - Stores Delta table data via S3A protocol
+
+**Key Features**:
+- ✅ Change Data Feed (CDF) for tracking all changes
+- ✅ ACID transactions with transaction log
+- ✅ Time travel queries
+- ✅ Schema evolution
+- ✅ Automatic optimization and compaction
+
+**Quick Validation**:
+```bash
+# Check Spark Master health
+curl http://localhost:8080
+
+# Run Delta infrastructure tests
+poetry run pytest tests/integration/test_infrastructure.py::TestSparkDeltaInfrastructure -v
+
+# Run all Delta Lake tests (25 tests)
+poetry run pytest tests/integration/test_deltalake_cdc.py \
+                 tests/e2e/test_delta_cdf_workflow.py \
+                 tests/e2e/test_postgres_to_delta.py \
+                 tests/e2e/test_mysql_to_delta.py -v
+```
+
+**Documentation**: See [Delta Lake Setup Guide](docs/infrastructure/delta-lake-setup.md) for detailed configuration, CDF usage, and troubleshooting.
 
 ## 🔧 Common Operations
 
