@@ -4,13 +4,20 @@ import pytest
 from unittest.mock import MagicMock, patch
 from datetime import datetime, timedelta
 
+# Check PyIceberg availability
+try:
+    import pyiceberg
+    PYICEBERG_AVAILABLE = True
+except ImportError:
+    PYICEBERG_AVAILABLE = False
+
 
 class TestIcebergIncrementalRead:
     """Test suite for Iceberg incremental read functionality."""
 
     @pytest.mark.skipif(
+        not PYICEBERG_AVAILABLE,
         reason="Requires PyIceberg installation",
-        condition=True,
     )
     def test_incremental_read_between_snapshots(self):
         """Test incremental read between two snapshots."""
@@ -30,8 +37,8 @@ class TestIcebergIncrementalRead:
         assert isinstance(changes, (list, type(None)))
 
     @pytest.mark.skipif(
-        reason="Requires PyIceberg installation",
-        condition=True,
+        not PYICEBERG_AVAILABLE,
+        reason="Requires PyIceberg installation"
     )
     def test_incremental_read_by_timestamp(self):
         """Test incremental read by timestamp range."""
@@ -54,8 +61,8 @@ class TestIcebergIncrementalRead:
         assert isinstance(changes, (list, type(None)))
 
     @pytest.mark.skipif(
-        reason="Requires PyIceberg installation",
-        condition=True,
+        not PYICEBERG_AVAILABLE,
+        reason="Requires PyIceberg installation"
     )
     def test_incremental_read_with_filter(self):
         """Test incremental read with predicate filter."""
@@ -76,8 +83,8 @@ class TestIcebergIncrementalRead:
         assert isinstance(changes, (list, type(None)))
 
     @pytest.mark.skipif(
-        reason="Requires PyIceberg installation",
-        condition=True,
+        not PYICEBERG_AVAILABLE,
+        reason="Requires PyIceberg installation"
     )
     def test_incremental_read_partition_pruning(self):
         """Test incremental read with partition pruning."""
@@ -98,8 +105,8 @@ class TestIcebergIncrementalRead:
         assert isinstance(changes, (list, type(None)))
 
     @pytest.mark.skipif(
-        reason="Requires PyIceberg installation",
-        condition=True,
+        not PYICEBERG_AVAILABLE,
+        reason="Requires PyIceberg installation"
     )
     def test_incremental_read_schema_projection(self):
         """Test incremental read with column projection."""
@@ -120,8 +127,8 @@ class TestIcebergIncrementalRead:
         assert isinstance(changes, (list, type(None)))
 
     @pytest.mark.skipif(
-        reason="Requires PyIceberg installation",
-        condition=True,
+        not PYICEBERG_AVAILABLE,
+        reason="Requires PyIceberg installation"
     )
     def test_incremental_read_file_metadata(self):
         """Test retrieving file metadata for incremental read."""
@@ -141,8 +148,8 @@ class TestIcebergIncrementalRead:
         assert isinstance(file_metadata, list)
 
     @pytest.mark.skipif(
-        reason="Requires PyIceberg installation",
-        condition=True,
+        not PYICEBERG_AVAILABLE,
+        reason="Requires PyIceberg installation"
     )
     def test_incremental_read_row_count_estimate(self):
         """Test estimating row count for incremental read."""
@@ -162,8 +169,8 @@ class TestIcebergIncrementalRead:
         assert isinstance(estimate, (int, type(None)))
 
     @pytest.mark.skipif(
-        reason="Requires PyIceberg installation",
-        condition=True,
+        not PYICEBERG_AVAILABLE,
+        reason="Requires PyIceberg installation"
     )
     def test_incremental_read_empty_result(self):
         """Test incremental read with no changes."""
@@ -184,8 +191,8 @@ class TestIcebergIncrementalRead:
         assert changes is None or len(changes) == 0
 
     @pytest.mark.skipif(
-        reason="Requires PyIceberg installation",
-        condition=True,
+        not PYICEBERG_AVAILABLE,
+        reason="Requires PyIceberg installation"
     )
     def test_incremental_read_scan_planning(self):
         """Test scan planning for incremental read."""
@@ -205,8 +212,8 @@ class TestIcebergIncrementalRead:
         assert scan_plan is not None or scan_plan is None
 
     @pytest.mark.skipif(
-        reason="Requires PyIceberg installation",
-        condition=True,
+        not PYICEBERG_AVAILABLE,
+        reason="Requires PyIceberg installation"
     )
     def test_incremental_read_batched(self):
         """Test batched incremental read."""
