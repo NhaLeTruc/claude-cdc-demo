@@ -3,6 +3,13 @@
 import pytest
 from datetime import datetime, timedelta
 
+# Check PyIceberg availability
+try:
+    import pyiceberg
+    PYICEBERG_AVAILABLE = True
+except ImportError:
+    PYICEBERG_AVAILABLE = False
+
 
 @pytest.fixture
 def iceberg_table_manager():
@@ -25,8 +32,8 @@ def iceberg_table_manager():
 
 @pytest.mark.integration
 @pytest.mark.skipif(
-    reason="Requires Iceberg infrastructure (PyIceberg, catalog, warehouse)",
-    condition=True,
+    not PYICEBERG_AVAILABLE,
+    reason="Requires Iceberg infrastructure (PyIceberg, catalog, warehouse)"
 )
 class TestIcebergIncrementalCDC:
     """Integration tests for Iceberg snapshot-based CDC."""
