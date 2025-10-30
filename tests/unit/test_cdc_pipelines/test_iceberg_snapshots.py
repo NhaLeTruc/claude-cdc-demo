@@ -4,13 +4,20 @@ import pytest
 from unittest.mock import MagicMock, patch
 from datetime import datetime, timedelta
 
+# Check PyIceberg availability
+try:
+    import pyiceberg
+    PYICEBERG_AVAILABLE = True
+except ImportError:
+    PYICEBERG_AVAILABLE = False
+
 
 class TestIcebergSnapshotTracker:
     """Test suite for Iceberg snapshot tracking."""
 
     @pytest.mark.skipif(
+        not PYICEBERG_AVAILABLE,
         reason="Requires PyIceberg installation",
-        condition=True,
     )
     def test_get_current_snapshot(self):
         """Test retrieving current snapshot."""
@@ -26,8 +33,8 @@ class TestIcebergSnapshotTracker:
         assert snapshot is not None or snapshot is None
 
     @pytest.mark.skipif(
+        not PYICEBERG_AVAILABLE,
         reason="Requires PyIceberg installation",
-        condition=True,
     )
     def test_get_snapshot_history(self):
         """Test retrieving snapshot history."""
@@ -44,8 +51,8 @@ class TestIcebergSnapshotTracker:
         assert len(history) <= 10
 
     @pytest.mark.skipif(
+        not PYICEBERG_AVAILABLE,
         reason="Requires PyIceberg installation",
-        condition=True,
     )
     def test_snapshot_metadata(self):
         """Test retrieving snapshot metadata."""
@@ -61,8 +68,8 @@ class TestIcebergSnapshotTracker:
         assert isinstance(metadata, dict) or metadata is None
 
     @pytest.mark.skipif(
+        not PYICEBERG_AVAILABLE,
         reason="Requires PyIceberg installation",
-        condition=True,
     )
     def test_snapshot_at_timestamp(self):
         """Test getting snapshot at specific timestamp."""
@@ -80,8 +87,8 @@ class TestIcebergSnapshotTracker:
         assert snapshot is not None or snapshot is None
 
     @pytest.mark.skipif(
+        not PYICEBERG_AVAILABLE,
         reason="Requires PyIceberg installation",
-        condition=True,
     )
     def test_compare_snapshots(self):
         """Test comparing two snapshots."""
@@ -101,8 +108,8 @@ class TestIcebergSnapshotTracker:
         assert isinstance(diff, dict)
 
     @pytest.mark.skipif(
+        not PYICEBERG_AVAILABLE,
         reason="Requires PyIceberg installation",
-        condition=True,
     )
     def test_snapshot_files_added(self):
         """Test tracking files added in snapshot."""
@@ -118,8 +125,8 @@ class TestIcebergSnapshotTracker:
         assert isinstance(files, list)
 
     @pytest.mark.skipif(
+        not PYICEBERG_AVAILABLE,
         reason="Requires PyIceberg installation",
-        condition=True,
     )
     def test_snapshot_files_deleted(self):
         """Test tracking files deleted in snapshot."""
@@ -135,8 +142,8 @@ class TestIcebergSnapshotTracker:
         assert isinstance(files, list)
 
     @pytest.mark.skipif(
+        not PYICEBERG_AVAILABLE,
         reason="Requires PyIceberg installation",
-        condition=True,
     )
     def test_snapshot_summary(self):
         """Test getting snapshot summary."""
@@ -152,8 +159,8 @@ class TestIcebergSnapshotTracker:
         assert isinstance(summary, dict) or summary is None
 
     @pytest.mark.skipif(
+        not PYICEBERG_AVAILABLE,
         reason="Requires PyIceberg installation",
-        condition=True,
     )
     def test_snapshot_operation_type(self):
         """Test identifying snapshot operation type."""
@@ -169,8 +176,8 @@ class TestIcebergSnapshotTracker:
         assert operation in ["append", "replace", "overwrite", "delete", None]
 
     @pytest.mark.skipif(
+        not PYICEBERG_AVAILABLE,
         reason="Requires PyIceberg installation",
-        condition=True,
     )
     def test_snapshot_parent_id(self):
         """Test retrieving snapshot parent."""

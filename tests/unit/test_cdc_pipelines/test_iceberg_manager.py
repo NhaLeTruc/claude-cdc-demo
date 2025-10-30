@@ -3,6 +3,13 @@
 import pytest
 from unittest.mock import MagicMock, patch, PropertyMock
 
+# Check PyIceberg availability
+try:
+    import pyiceberg
+    PYICEBERG_AVAILABLE = True
+except ImportError:
+    PYICEBERG_AVAILABLE = False
+
 
 class TestIcebergTableManager:
     """Test suite for Iceberg table management."""
@@ -26,8 +33,8 @@ class TestIcebergTableManager:
                 IcebergTableManager(config)
 
     @pytest.mark.skipif(
+        not PYICEBERG_AVAILABLE,
         reason="Requires PyIceberg installation",
-        condition=True,
     )
     def test_create_catalog_connection(self):
         """Test creating catalog connection."""
@@ -49,8 +56,8 @@ class TestIcebergTableManager:
         assert catalog is not None
 
     @pytest.mark.skipif(
+        not PYICEBERG_AVAILABLE,
         reason="Requires PyIceberg installation",
-        condition=True,
     )
     def test_create_table_with_schema(self):
         """Test creating Iceberg table with schema."""
@@ -80,8 +87,8 @@ class TestIcebergTableManager:
         assert table is not None
 
     @pytest.mark.skipif(
+        not PYICEBERG_AVAILABLE,
         reason="Requires PyIceberg installation",
-        condition=True,
     )
     def test_partition_spec_configuration(self):
         """Test partition specification configuration."""
@@ -105,8 +112,8 @@ class TestIcebergTableManager:
         assert len(partition_spec.fields) > 0
 
     @pytest.mark.skipif(
+        not PYICEBERG_AVAILABLE,
         reason="Requires PyIceberg installation",
-        condition=True,
     )
     def test_sort_order_configuration(self):
         """Test sort order configuration."""
@@ -129,8 +136,8 @@ class TestIcebergTableManager:
         assert sort_order is not None
 
     @pytest.mark.skipif(
+        not PYICEBERG_AVAILABLE,
         reason="Requires PyIceberg installation",
-        condition=True,
     )
     def test_table_properties(self):
         """Test table properties configuration."""
@@ -153,8 +160,8 @@ class TestIcebergTableManager:
         assert "format-version" in properties or len(properties) >= 0
 
     @pytest.mark.skipif(
+        not PYICEBERG_AVAILABLE,
         reason="Requires PyIceberg installation",
-        condition=True,
     )
     def test_load_existing_table(self):
         """Test loading an existing table."""
@@ -181,8 +188,8 @@ class TestIcebergTableManager:
             pass
 
     @pytest.mark.skipif(
+        not PYICEBERG_AVAILABLE,
         reason="Requires PyIceberg installation",
-        condition=True,
     )
     def test_table_schema_retrieval(self):
         """Test retrieving table schema."""
@@ -204,8 +211,8 @@ class TestIcebergTableManager:
         assert schema is not None or schema is None
 
     @pytest.mark.skipif(
+        not PYICEBERG_AVAILABLE,
         reason="Requires PyIceberg installation",
-        condition=True,
     )
     def test_table_location(self):
         """Test table location path."""
