@@ -1,0 +1,50 @@
+# Apache Iceberg REST Catalog Configuration
+# This configuration is used by the tabulario/iceberg-rest container
+
+catalog:
+  # Catalog implementation (uses in-memory JDBC catalog)
+  catalog-impl: org.apache.iceberg.jdbc.JdbcCatalog
+
+  # URI for the catalog database (H2 in-memory for simplicity)
+  uri: jdbc:h2:mem:iceberg;DB_CLOSE_DELAY=-1;MODE=PostgreSQL
+
+  # JDBC driver
+  jdbc.driver: org.h2.Driver
+
+  # Warehouse location in S3 (MinIO)
+  warehouse: s3://warehouse/
+
+  # S3 FileIO implementation
+  io-impl: org.apache.iceberg.aws.s3.S3FileIO
+
+  # S3/MinIO configuration
+  s3.endpoint: http://minio:9000
+  s3.path-style-access: true
+  s3.access-key-id: minioadmin
+  s3.secret-access-key: minioadmin
+
+  # AWS region (required even for MinIO)
+  client.region: us-east-1
+
+# REST server configuration
+rest:
+  # Port the REST server will listen on
+  port: 8181
+
+  # Host the REST server will bind to
+  host: 0.0.0.0
+
+  # Enable CORS for development
+  cors:
+    enabled: true
+    allowed-origins:
+      - "*"
+    allowed-methods:
+      - GET
+      - POST
+      - PUT
+      - DELETE
+      - HEAD
+      - OPTIONS
+    allowed-headers:
+      - "*"
