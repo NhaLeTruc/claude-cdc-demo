@@ -4,11 +4,18 @@ import pytest
 from datetime import datetime
 import time
 
+# Check PyIceberg availability
+try:
+    import pyiceberg
+    PYICEBERG_AVAILABLE = True
+except ImportError:
+    PYICEBERG_AVAILABLE = False
+
 
 @pytest.mark.integration
 @pytest.mark.skipif(
-    reason="Requires full infrastructure (Postgres, Kafka, Debezium, Spark, Iceberg)",
-    condition=True,
+    not PYICEBERG_AVAILABLE,
+    reason="Requires full infrastructure (Postgres, Kafka, Debezium, Spark, Iceberg)"
 )
 class TestCrossStorageCDC:
     """Integration tests for Postgres to Iceberg cross-storage CDC."""
