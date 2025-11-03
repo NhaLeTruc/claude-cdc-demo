@@ -18,8 +18,8 @@ mysql-connector-python = "^8.0.33"
 # Lakehouse
 pyspark = "^3.5.0"
 delta-spark = "^3.3.2"
-pyiceberg = {extras = ["s3fs", "hive"], version = "^0.10.0"}
-pyarrow = "^14.0.0"
+pyiceberg = {extras = ["s3fs", "hive", "pyiceberg-core"], version = "^0.8.0"}
+pyarrow = "^15.0.0"
 # Data Generation
 faker = "^20.0.0"
 # CLI
