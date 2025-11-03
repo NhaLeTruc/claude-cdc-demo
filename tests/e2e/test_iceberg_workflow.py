@@ -140,7 +140,8 @@ class TestIcebergCDCWorkflow:
         assert len(changed_files_3_to_4) > 0  # Files changed due to deletes
 
         # Step 7: Data quality validation
-        validator = IntegrityValidator()
+        # Note: IntegrityValidator is abstract, specific validators should be used if needed
+        # validator = IntegrityValidator()
 
         # Validate snapshot metadata
         snapshot_metadata = tracker.get_snapshot_metadata(snapshot_4.snapshot_id)

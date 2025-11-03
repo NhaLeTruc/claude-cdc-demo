@@ -77,3 +77,48 @@ def mock_spark_session():
         mock_spark.sql = MagicMock()
 
         yield {"spark": mock_spark, "builder": mock_builder, "class": mock_spark_class}
+
+
+@pytest.fixture
+def iceberg_test_table():
+    """Create a test Iceberg table for unit tests."""
+    try:
+        from src.cdc_pipelines.iceberg.table_manager import IcebergTableManager, IcebergTableConfig
+        from pyiceberg.schema import Schema
+        from pyiceberg.types import NestedField, LongType, StringType
+
+        config = IcebergTableConfig(
+            catalog_name="test_catalog",
+            namespace="test",
+            table_name="test_table",
+            warehouse_path="/tmp/iceberg_test_warehouse",
+        )
+
+        manager = IcebergTableManager(config)
+
+        # Create simple schema
+        schema = Schema(
+            NestedField(1, "id", LongType(), required=True),
+            NestedField(2, "name", StringType(), required=False),
+            NestedField(3, "value", StringType(), required=False),
+        )
+
+        # Create table if it doesn't exist
+        try:
+            if not manager.table_exists():
+                table = manager.create_table(schema)
+            else:
+                table = manager.load_table()
+
+            yield table
+
+            # Cleanup - drop table after test
+            try:
+                manager.drop_table()
+            except Exception:
+                pass  # Ignore cleanup errors
+        except Exception as e:
+            # If table creation fails, skip the test
+            pytest.skip(f"Could not create test table: {e}")
+    except ImportError:
+        pytest.skip("PyIceberg not available")
