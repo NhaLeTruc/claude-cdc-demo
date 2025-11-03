@@ -41,15 +41,27 @@ class SnapshotTracker:
     for incremental data processing.
     """
 
-    def __init__(self, table: Table):
+    def __init__(
+        self,
+        table: Optional[Table] = None,
+        catalog_name: Optional[str] = None,
+        namespace: Optional[str] = None,
+        table_name: Optional[str] = None,
+        warehouse_path: str = "/tmp/iceberg_warehouse",
+    ):
         """
         Initialize Snapshot Tracker.
 
         Args:
-            table: Iceberg table instance
+            table: Iceberg table instance (if provided, other params ignored)
+            catalog_name: Catalog name (used if table not provided)
+            namespace: Namespace name (used if table not provided)
+            table_name: Table name (used if table not provided)
+            warehouse_path: Warehouse path for catalog connection
 
         Raises:
             ImportError: If PyIceberg is not installed
+            ValueError: If neither table nor catalog params provided
         """
         if not PYICEBERG_AVAILABLE:
             raise ImportError(
@@ -57,9 +69,31 @@ class SnapshotTracker:
                 "Install it with: pip install pyiceberg"
             )
 
-        self.table = table
+        if table is not None:
+            self.table = table
+        elif catalog_name and namespace and table_name:
+            # Load table from catalog
+            from pyiceberg.catalog import load_catalog
+
+            catalog = load_catalog(
+                catalog_name,
+                **{
+                    "type": "rest",
+                    "uri": "http://localhost:8181",
+                    "warehouse": warehouse_path,
+                    "s3.endpoint": "http://localhost:9000",
+                    "s3.access-key-id": "minioadmin",
+                    "s3.secret-access-key": "minioadmin",
+                    "s3.path-style-access": "true",
+                }
+            )
+            table_identifier = f"{namespace}.{table_name}"
+            self.table = catalog.load_table(table_identifier)
+        else:
+            raise ValueError("Either table or (catalog_name, namespace, table_name) must be provided")
+
         self._snapshot_cache: Dict[int, SnapshotInfo] = {}
-        logger.info(f"Initialized SnapshotTracker for table {table.identifier}")
+        logger.info(f"Initialized SnapshotTracker for table {self.table.identifier}")
 
     def _parse_snapshot(self, snapshot: Snapshot) -> SnapshotInfo:
         """
@@ -83,6 +117,11 @@ class SnapshotTracker:
             manifest_list=snapshot.manifest_list,
         )
 
+    def refresh(self) -> None:
+        """Refresh the table metadata to get latest snapshots."""
+        self.table = self.table.refresh()
+        self._snapshot_cache.clear()
+
     def get_current_snapshot_id(self) -> Optional[int]:
         """
         Get the current snapshot ID.
@@ -90,6 +129,7 @@ class SnapshotTracker:
         Returns:
             Current snapshot ID or None
         """
+        self.table = self.table.refresh()
         return self.table.metadata.current_snapshot_id
 
     def get_current_snapshot(self) -> Optional[SnapshotInfo]:
@@ -390,3 +430,129 @@ class SnapshotTracker:
         """Clear the snapshot cache"""
         self._snapshot_cache.clear()
         logger.info("Cleared snapshot cache")
+
+    def get_snapshot_metadata(self, snapshot_id: int) -> Optional[Dict[str, Any]]:
+        """
+        Get metadata for a specific snapshot.
+
+        Args:
+            snapshot_id: Snapshot ID
+
+        Returns:
+            Dictionary with snapshot metadata or None if not found
+        """
+        snapshot_info = self.get_snapshot_info(snapshot_id)
+        if not snapshot_info:
+            return None
+
+        return {
+            "snapshot_id": snapshot_info.snapshot_id,
+            "parent_snapshot_id": snapshot_info.parent_snapshot_id,
+            "timestamp": snapshot_info.timestamp,
+            "timestamp_ms": snapshot_info.timestamp_ms,
+            "operation": snapshot_info.operation,
+            "summary": snapshot_info.summary,
+            "manifest_list": snapshot_info.manifest_list,
+        }
+
+    def get_snapshot_history(self, limit: Optional[int] = None) -> List[SnapshotInfo]:
+        """
+        Get snapshot history.
+
+        Args:
+            limit: Maximum number of snapshots to return (all if None)
+
+        Returns:
+            List of SnapshotInfo objects in chronological order
+        """
+        snapshots = self.get_all_snapshots()
+        if limit:
+            return snapshots[-limit:] if len(snapshots) > limit else snapshots
+        return snapshots
+
+    def get_snapshot_at_timestamp(self, timestamp: datetime) -> Optional[SnapshotInfo]:
+        """
+        Get snapshot at or before a specific timestamp.
+
+        Args:
+            timestamp: Target timestamp
+
+        Returns:
+            SnapshotInfo for closest snapshot or None
+        """
+        return self.find_snapshot_by_timestamp(timestamp)
+
+    def get_snapshot_operation(self, snapshot_id: int) -> Optional[str]:
+        """
+        Get the operation type for a snapshot.
+
+        Args:
+            snapshot_id: Snapshot ID
+
+        Returns:
+            Operation type string or None
+        """
+        snapshot_info = self.get_snapshot_info(snapshot_id)
+        return snapshot_info.operation if snapshot_info else None
+
+    def get_snapshot_summary(self, snapshot_id: int) -> Optional[Dict[str, Any]]:
+        """
+        Get summary information for a snapshot.
+
+        Args:
+            snapshot_id: Snapshot ID
+
+        Returns:
+            Summary dictionary or None
+        """
+        snapshot_info = self.get_snapshot_info(snapshot_id)
+        return snapshot_info.summary if snapshot_info else None
+
+    def get_added_files(self, start_snapshot_id: int, end_snapshot_id: int) -> List[str]:
+        """
+        Get files added between two snapshots.
+
+        Args:
+            start_snapshot_id: Starting snapshot ID
+            end_snapshot_id: Ending snapshot ID
+
+        Returns:
+            List of added file paths
+        """
+        # For now, return the changed files (manifest lists)
+        # In a full implementation, this would parse manifests to get actual data files
+        start_snapshot = self.get_snapshot_info(start_snapshot_id)
+        end_snapshot = self.get_snapshot_info(end_snapshot_id)
+
+        if not start_snapshot or not end_snapshot:
+            return []
+
+        start_manifests = {start_snapshot.manifest_list} if start_snapshot.manifest_list else set()
+        end_manifests = {end_snapshot.manifest_list} if end_snapshot.manifest_list else set()
+
+        added = end_manifests - start_manifests
+        return list(added)
+
+    def get_deleted_files(self, start_snapshot_id: int, end_snapshot_id: int) -> List[str]:
+        """
+        Get files deleted between two snapshots.
+
+        Args:
+            start_snapshot_id: Starting snapshot ID
+            end_snapshot_id: Ending snapshot ID
+
+        Returns:
+            List of deleted file paths
+        """
+        # For now, return files that were in start but not in end
+        start_snapshot = self.get_snapshot_info(start_snapshot_id)
+        end_snapshot = self.get_snapshot_info(end_snapshot_id)
+
+        if not start_snapshot or not end_snapshot:
+            return []
+
+        start_manifests = {start_snapshot.manifest_list} if start_snapshot.manifest_list else set()
+        end_manifests = {end_snapshot.manifest_list} if end_snapshot.manifest_list else set()
+
+        deleted = start_manifests - end_manifests
+        return list(deleted)

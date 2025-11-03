@@ -31,15 +31,27 @@ class IncrementalReader:
     CDC-like workflows for Iceberg tables.
     """
 
-    def __init__(self, table: Table):
+    def __init__(
+        self,
+        table: Optional[Table] = None,
+        catalog_name: Optional[str] = None,
+        namespace: Optional[str] = None,
+        table_name: Optional[str] = None,
+        warehouse_path: str = "/tmp/iceberg_warehouse",
+    ):
         """
         Initialize Incremental Reader.
 
         Args:
-            table: Iceberg table instance
+            table: Iceberg table instance (if provided, other params ignored)
+            catalog_name: Catalog name (used if table not provided)
+            namespace: Namespace name (used if table not provided)
+            table_name: Table name (used if table not provided)
+            warehouse_path: Warehouse path for catalog connection
 
         Raises:
             ImportError: If PyIceberg is not installed
+            ValueError: If neither table nor catalog params provided
         """
         if not PYICEBERG_AVAILABLE:
             raise ImportError(
@@ -47,15 +59,28 @@ class IncrementalReader:
                 "Install it with: pip install pyiceberg"
             )
 
-        self.table = table
-        self.snapshot_tracker = SnapshotTracker(table)
-        logger.info(f"Initialized IncrementalReader for table {table.identifier}")
+        if table is not None:
+            self.table = table
+            self.snapshot_tracker = SnapshotTracker(table=table)
+        elif catalog_name and namespace and table_name:
+            # Load table through SnapshotTracker
+            self.snapshot_tracker = SnapshotTracker(
+                catalog_name=catalog_name,
+                namespace=namespace,
+                table_name=table_name,
+                warehouse_path=warehouse_path,
+            )
+            self.table = self.snapshot_tracker.table
+        else:
+            raise ValueError("Either table or (catalog_name, namespace, table_name) must be provided")
+
+        logger.info(f"Initialized IncrementalReader for table {self.table.identifier}")
 
     def read_incremental(
         self,
         start_snapshot_id: int,
         end_snapshot_id: Optional[int] = None,
-    ) -> pa.Table:
+    ) -> List[Dict[str, Any]]:
         """
         Read incremental data between two snapshots.
 
@@ -64,13 +89,13 @@ class IncrementalReader:
             end_snapshot_id: Ending snapshot ID (inclusive), current if None
 
         Returns:
-            PyArrow Table with incremental data
+            List of records as dictionaries
         """
         if end_snapshot_id is None:
             end_snapshot_id = self.snapshot_tracker.get_current_snapshot_id()
             if end_snapshot_id is None:
                 logger.warning("No current snapshot available")
-                return pa.table({})
+                return []
 
         logger.info(
             f"Reading incremental data from snapshot {start_snapshot_id} "
@@ -91,7 +116,9 @@ class IncrementalReader:
             arrow_table = scan.to_arrow()
 
             logger.info(f"Read {arrow_table.num_rows} rows incrementally")
-            return arrow_table
+
+            # Convert to list of dicts for easier use in tests and applications
+            return arrow_table.to_pylist()
 
         except Exception as e:
             logger.error(f"Failed to read incremental data: {e}")
@@ -355,3 +382,208 @@ class IncrementalReader:
         # Fallback: count rows by reading
         data = self.read_snapshot(snapshot_id)
         return data.num_rows
+
+    def get_changed_files(
+        self, start_snapshot_id: int, end_snapshot_id: Optional[int] = None
+    ) -> List[str]:
+        """
+        Get list of files that changed between two snapshots.
+
+        Args:
+            start_snapshot_id: Starting snapshot ID
+            end_snapshot_id: Ending snapshot ID (current if None)
+
+        Returns:
+            List of file paths that changed
+        """
+        if end_snapshot_id is None:
+            end_snapshot_id = self.snapshot_tracker.get_current_snapshot_id()
+            if end_snapshot_id is None:
+                return []
+
+        start_snapshot = self.snapshot_tracker.get_snapshot_info(start_snapshot_id)
+        end_snapshot = self.snapshot_tracker.get_snapshot_info(end_snapshot_id)
+
+        if not start_snapshot or not end_snapshot:
+            logger.warning(f"Could not find snapshots {start_snapshot_id} or {end_snapshot_id}")
+            return []
+
+        changed_files = []
+
+        try:
+            # Get table for accessing manifest files
+            table = self.snapshot_tracker.table
+
+            # Get manifest lists for both snapshots
+            start_manifests = set()
+            end_manifests = set()
+
+            # Parse manifest list for start snapshot
+            for snapshot in table.metadata.snapshots:
+                if snapshot.snapshot_id == start_snapshot_id:
+                    start_manifests.add(snapshot.manifest_list)
+                elif snapshot.snapshot_id == end_snapshot_id:
+                    end_manifests.add(snapshot.manifest_list)
+
+            # Files that are in end but not in start are new/changed
+            changed_files = list(end_manifests - start_manifests)
+
+            logger.info(
+                f"Found {len(changed_files)} changed manifest files between "
+                f"snapshots {start_snapshot_id} and {end_snapshot_id}"
+            )
+
+        except Exception as e:
+            logger.error(f"Failed to get changed files: {e}")
+
+        return changed_files
+
+    def read_incremental_by_time(
+        self, start_timestamp: datetime, end_timestamp: Optional[datetime] = None
+    ) -> List[Dict[str, Any]]:
+        """
+        Read incremental changes between two timestamps.
+
+        Args:
+            start_timestamp: Start timestamp
+            end_timestamp: End timestamp (current if None)
+
+        Returns:
+            List of records as dictionaries
+        """
+        # Find snapshots at or near these timestamps
+        start_snapshot = self.snapshot_tracker.find_snapshot_by_timestamp(start_timestamp)
+
+        if end_timestamp:
+            end_snapshot = self.snapshot_tracker.find_snapshot_by_timestamp(end_timestamp)
+            end_snapshot_id = end_snapshot.snapshot_id if end_snapshot else None
+        else:
+            end_snapshot_id = None
+
+        if not start_snapshot:
+            logger.warning(f"No snapshot found near timestamp {start_timestamp}")
+            return []
+
+        # Use snapshot-based incremental read
+        return self.read_incremental(
+            start_snapshot_id=start_snapshot.snapshot_id,
+            end_snapshot_id=end_snapshot_id,
+        )
+
+    def read_incremental_with_filter(
+        self,
+        start_snapshot_id: int,
+        end_snapshot_id: Optional[int] = None,
+        filter_expression: Optional[str] = None,
+    ) -> List[Dict[str, Any]]:
+        """
+        Read incremental changes with a filter applied.
+
+        Args:
+            start_snapshot_id: Starting snapshot ID
+            end_snapshot_id: Ending snapshot ID (current if None)
+            filter_expression: Filter expression (e.g., "status = 'active'")
+
+        Returns:
+            List of filtered records as dictionaries
+        """
+        # Read incremental data (already returns list of dicts)
+        records = self.read_incremental(
+            start_snapshot_id=start_snapshot_id,
+            end_snapshot_id=end_snapshot_id,
+        )
+
+        # Apply filter if provided
+        if filter_expression:
+            # Parse simple filter expressions (field = 'value')
+            import re
+            match = re.match(r"(\w+)\s*=\s*'([^']*)'", filter_expression)
+            if match:
+                field_name, field_value = match.groups()
+                records = [r for r in records if r.get(field_name) == field_value]
+            else:
+                logger.warning(f"Unsupported filter expression: {filter_expression}")
+
+        return records
+
+    def estimate_row_count(
+        self, start_snapshot_id: int, end_snapshot_id: Optional[int] = None
+    ) -> int:
+        """
+        Estimate row count between two snapshots.
+
+        Args:
+            start_snapshot_id: Starting snapshot ID
+            end_snapshot_id: Ending snapshot ID (current if None)
+
+        Returns:
+            Estimated number of rows
+        """
+        if end_snapshot_id is None:
+            end_snapshot_id = self.snapshot_tracker.get_current_snapshot_id()
+            if end_snapshot_id is None:
+                return 0
+
+        end_snapshot = self.snapshot_tracker.get_snapshot_info(end_snapshot_id)
+        if end_snapshot and "total-records" in end_snapshot.summary:
+            return int(end_snapshot.summary["total-records"])
+
+        return 0
+
+    def plan_incremental_scan(
+        self, start_snapshot_id: int, end_snapshot_id: Optional[int] = None
+    ) -> Dict[str, Any]:
+        """
+        Plan an incremental scan and return scan details.
+
+        Args:
+            start_snapshot_id: Starting snapshot ID
+            end_snapshot_id: Ending snapshot ID (current if None)
+
+        Returns:
+            Dictionary with scan plan details
+        """
+        if end_snapshot_id is None:
+            end_snapshot_id = self.snapshot_tracker.get_current_snapshot_id()
+            if end_snapshot_id is None:
+                return {"error": "No current snapshot"}
+
+        start_snapshot = self.snapshot_tracker.get_snapshot_info(start_snapshot_id)
+        end_snapshot = self.snapshot_tracker.get_snapshot_info(end_snapshot_id)
+
+        if not start_snapshot or not end_snapshot:
+            return {"error": "Snapshots not found"}
+
+        return {
+            "start_snapshot_id": start_snapshot_id,
+            "end_snapshot_id": end_snapshot_id,
+            "start_timestamp": start_snapshot.timestamp,
+            "end_timestamp": end_snapshot.timestamp,
+            "estimated_rows": self.estimate_row_count(start_snapshot_id, end_snapshot_id),
+        }
+
+    def read_incremental_batched(
+        self,
+        start_snapshot_id: int,
+        end_snapshot_id: Optional[int] = None,
+        batch_size: int = 1000,
+    ) -> List[List[Dict[str, Any]]]:
+        """
+        Read incremental data in batches.
+
+        Args:
+            start_snapshot_id: Starting snapshot ID
+            end_snapshot_id: Ending snapshot ID (current if None)
+            batch_size: Number of records per batch
+
+        Returns:
+            List of batches, where each batch is a list of records
+        """
+        records = self.read_incremental(start_snapshot_id, end_snapshot_id)
+
+        # Split into batches
+        batches = []
+        for i in range(0, len(records), batch_size):
+            batches.append(records[i : i + batch_size])
+
+        return batches
