@@ -266,10 +266,11 @@ services:
     ports:
       - "8181:8181"
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8181/v1/config"]
+      test: ["CMD-SHELL", "timeout 1 bash -c '</dev/tcp/localhost/8181' || exit 1"]
       interval: 10s
       timeout: 5s
       retries: 5
+      start_period: 30s
     networks:
       - cdc-network
 
