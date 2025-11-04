@@ -7,8 +7,8 @@ import time
 
 @pytest.mark.e2e
 @pytest.mark.skipif(
-    reason="Requires complete infrastructure stack",
-    condition=True,
+    reason="Requires complete infrastructure stack and streaming pipelines running",
+    condition=False,  # Changed to False - tests will run if infrastructure is available
 )
 class TestPostgresToIcebergE2E:
     """End-to-end tests for complete cross-storage CDC workflow."""
@@ -72,7 +72,7 @@ class TestPostgresToIcebergE2E:
                     customer["city"],
                     customer["state"],
                     customer["country"],
-                    customer["tier"],
+                    customer["customer_tier"],
                     customer["lifetime_value"],
                 ),
             )
