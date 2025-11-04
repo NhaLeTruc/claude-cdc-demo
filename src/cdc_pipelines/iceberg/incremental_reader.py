@@ -102,6 +102,11 @@ class IncrementalReader:
             f"to {end_snapshot_id}"
         )
 
+        # If start and end are the same, return empty list
+        if start_snapshot_id == end_snapshot_id:
+            logger.info("Start and end snapshots are the same, returning empty result")
+            return []
+
         try:
             # Use Iceberg's incremental scan
             scan = self.table.scan(
