@@ -2,7 +2,24 @@
 
 import pytest
 import time
+import requests
 from datetime import datetime
+
+
+def is_debezium_connector_running():
+    """Check if Debezium connector is running."""
+    try:
+        response = requests.get(
+            "http://localhost:8083/connectors/postgres-cdc-connector/status",
+            timeout=2
+        )
+        if response.status_code == 200:
+            status = response.json()
+            connector_state = status.get("connector", {}).get("state")
+            return connector_state == "RUNNING"
+    except Exception:
+        pass
+    return False
 
 
 @pytest.mark.integration
@@ -154,28 +171,10 @@ class TestPostgresCDCPipeline:
         assert result[0]['phone'] is None
         assert result[0]['address'] is None
 
-    @pytest.mark.skip(reason="Requires Debezium connector to be registered")
-    def test_cdc_lag_within_threshold(self, postgres_connection, clean_customers_table):
-        """Test CDC lag stays within acceptable threshold."""
-        start_time = datetime.now()
-
-        postgres_connection.execute_query(
-            """
-            INSERT INTO customers (customer_id, first_name, last_name, email, created_at)
-            VALUES (1, 'John', 'Doe', 'john@example.com', NOW())
-            """
-        )
-
-        # Wait for CDC event to appear in destination
-        time.sleep(5)
-
-        end_time = datetime.now()
-        lag_seconds = (end_time - start_time).total_seconds()
-
-        # CDC lag should be less than 5 seconds
-        assert lag_seconds < 5
-
-    @pytest.mark.skip(reason="Requires full CDC pipeline setup")
+    @pytest.mark.skipif(
+        not is_debezium_connector_running(),
+        reason="Requires full CDC pipeline setup with Debezium running"
+    )
     def test_end_to_end_postgres_to_delta(self):
         """Test complete Postgres→DeltaLake pipeline."""
         # This would test the full pipeline end-to-end
