@@ -322,3 +322,7 @@ class DeltaCDCPipeline:
 
         logger.info(f"Pipeline stopped after {uptime:.2f} seconds")
         return status
+
+
+# Alias for backward compatibility (CDF = Change Data Feed)
+DeltaCDFPipeline = DeltaCDCPipeline

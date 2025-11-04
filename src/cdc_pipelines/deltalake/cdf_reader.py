@@ -30,10 +30,20 @@ class CDFReader:
 
         Args:
             table_path: Path to Delta table
-            spark: SparkSession instance (creates new if None)
+            spark: SparkSession instance (uses active session or creates new if None)
         """
         self.table_path = table_path
-        self.spark = spark or self._create_spark_session()
+        # Use provided spark session, or get active session, or create new one
+        if spark is not None:
+            self.spark = spark
+        else:
+            # Try to get active SparkSession first
+            try:
+                self.spark = SparkSession.getActiveSession()
+                if self.spark is None:
+                    self.spark = self._create_spark_session()
+            except Exception:
+                self.spark = self._create_spark_session()
         logger.info(f"Initialized CDFReader for {table_path}")
 
     def _create_spark_session(self) -> SparkSession:
@@ -83,6 +93,27 @@ class CDFReader:
         except Exception as e:
             logger.error(f"Failed to read changes: {e}")
             raise
+
+    def read_changes(
+        self,
+        start_version: int,
+        end_version: Optional[int] = None,
+    ) -> List[Dict[str, Any]]:
+        """
+        Read changes and return as list of dictionaries.
+
+        This is an alias for read_changes_between_versions that returns
+        the result as a list of row dictionaries for easier testing.
+
+        Args:
+            start_version: Starting version (inclusive)
+            end_version: Ending version (inclusive), latest if None
+
+        Returns:
+            List of change records as dictionaries
+        """
+        changes_df = self.read_changes_between_versions(start_version, end_version)
+        return [row.asDict() for row in changes_df.collect()]
 
     def read_changes_since_timestamp(
         self,
