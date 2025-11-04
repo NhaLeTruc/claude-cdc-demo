@@ -114,47 +114,33 @@ class KafkaToDeltaStreamingJob:
         """
         Define Debezium CDC event schema for customers table.
 
+        This schema is for the flattened format produced by ExtractNewRecordState transformation.
+
         Returns:
-            StructType representing Debezium event structure
+            StructType representing flattened Debezium event structure
         """
-        # Debezium payload schema for customers
-        before_after_schema = StructType([
+        # Flattened schema with customer data and CDC metadata
+        debezium_schema = StructType([
+            # Customer fields
             StructField("customer_id", LongType(), True),
             StructField("email", StringType(), True),
             StructField("first_name", StringType(), True),
             StructField("last_name", StringType(), True),
             StructField("phone", StringType(), True),
-            StructField("address_line1", StringType(), True),
+            StructField("address", StringType(), True),
             StructField("city", StringType(), True),
             StructField("state", StringType(), True),
-            StructField("postal_code", StringType(), True),
+            StructField("zip_code", StringType(), True),
             StructField("country", StringType(), True),
-            StructField("registration_date", TimestampType(), True),
-            StructField("last_updated", TimestampType(), True),
-            StructField("is_active", BooleanType(), True),
-            StructField("customer_tier", StringType(), True),
-            StructField("lifetime_value", DoubleType(), True),
-        ])
-
-        # Source metadata schema
-        source_schema = StructType([
-            StructField("version", StringType(), True),
-            StructField("connector", StringType(), True),
-            StructField("name", StringType(), True),
-            StructField("ts_ms", LongType(), True),
-            StructField("db", StringType(), True),
-            StructField("schema", StringType(), True),
-            StructField("table", StringType(), True),
-            StructField("lsn", LongType(), True),
-        ])
-
-        # Full Debezium envelope
-        debezium_schema = StructType([
-            StructField("before", before_after_schema, True),
-            StructField("after", before_after_schema, True),
-            StructField("source", source_schema, True),
-            StructField("op", StringType(), True),
-            StructField("ts_ms", LongType(), True),
+            StructField("created_at", LongType(), True),
+            StructField("updated_at", LongType(), True),
+            # CDC metadata fields added by ExtractNewRecordState
+            StructField("__deleted", StringType(), True),
+            StructField("__op", StringType(), True),
+            StructField("__db", StringType(), True),
+            StructField("__table", StringType(), True),
+            StructField("__ts_ms", LongType(), True),
+            StructField("__lsn", LongType(), True),
         ])
 
         return debezium_schema
@@ -182,7 +168,7 @@ class KafkaToDeltaStreamingJob:
 
     def parse_debezium_events(self, df: DataFrame) -> DataFrame:
         """
-        Parse Debezium JSON events.
+        Parse Debezium JSON events (flattened format from ExtractNewRecordState).
 
         Args:
             df: Raw Kafka DataFrame
@@ -202,14 +188,10 @@ class KafkaToDeltaStreamingJob:
             col("timestamp").alias("kafka_timestamp")
         )
 
-        # Flatten payload
+        # Flatten payload - the data is already flattened, just extract fields
         flattened_df = parsed_df.select(
             col("kafka_key"),
-            col("payload.before").alias("before"),
-            col("payload.after").alias("after"),
-            col("payload.source").alias("source"),
-            col("payload.op").alias("operation"),
-            col("payload.ts_ms").alias("event_timestamp_ms"),
+            col("payload.*"),  # All fields from payload
             col("topic"),
             col("partition"),
             col("offset"),
@@ -229,36 +211,44 @@ class KafkaToDeltaStreamingJob:
         - Add metadata columns
 
         Args:
-            df: Parsed DataFrame
+            df: Parsed DataFrame (flattened format)
 
         Returns:
             Transformed DataFrame ready for Delta Lake
         """
         # Skip DELETE operations (retain only active records)
-        df = df.filter(col("operation") != "d")
+        df = df.filter(col("__deleted") != "true")
 
-        # Transform from 'after' state
+        # Transform using flattened fields
         transformed_df = df.select(
-            col("after.customer_id").alias("customer_id"),
-            col("after.email").alias("email"),
+            col("customer_id"),
+            col("email"),
+            col("first_name"),
+            col("last_name"),
 
             # Transformation 1: Concatenate name
             concat_ws(" ",
-                col("after.first_name"),
-                col("after.last_name")
+                col("first_name"),
+                col("last_name")
             ).alias("full_name"),
 
-            # Transformation 2: Derive location
+            # Keep individual location fields
+            col("city"),
+            col("state"),
+            col("country"),
+
+            # Transformation 2: Derive combined location
             concat_ws(", ",
-                col("after.city"),
-                col("after.state"),
-                col("after.country")
+                col("city"),
+                col("state"),
+                col("country")
             ).alias("location"),
 
-            col("after.customer_tier").alias("customer_tier"),
-            col("after.lifetime_value").alias("lifetime_value"),
-            col("after.registration_date").alias("registration_date"),
-            col("after.is_active").alias("is_active"),
+            # Additional fields (with null handling for optional columns)
+            lit(None).cast(StringType()).alias("customer_tier"),
+            lit(None).cast(DoubleType()).alias("lifetime_value"),
+            lit(None).cast(TimestampType()).alias("registration_date"),
+            lit(True).alias("is_active"),
 
             # Placeholder for join enrichment
             lit(0).alias("total_orders"),
@@ -267,13 +257,13 @@ class KafkaToDeltaStreamingJob:
             current_timestamp().alias("_ingestion_timestamp"),
             lit("postgres_cdc").alias("_source_system"),
 
-            # Map operation
+            # Map operation using __op field
             expr("""
                 CASE
-                    WHEN operation = 'c' THEN 'INSERT'
-                    WHEN operation = 'u' THEN 'UPDATE'
-                    WHEN operation = 'd' THEN 'DELETE'
-                    WHEN operation = 'r' THEN 'SNAPSHOT'
+                    WHEN __op = 'c' THEN 'INSERT'
+                    WHEN __op = 'u' THEN 'UPDATE'
+                    WHEN __op = 'd' THEN 'DELETE'
+                    WHEN __op = 'r' THEN 'SNAPSHOT'
                     ELSE 'UNKNOWN'
                 END
             """).alias("_cdc_operation"),
@@ -283,8 +273,8 @@ class KafkaToDeltaStreamingJob:
             current_timestamp().alias("_processed_timestamp"),
 
             # Original CDC metadata
-            col("event_timestamp_ms").alias("_event_timestamp_ms"),
-            col("source.lsn").alias("_source_lsn"),
+            col("__ts_ms").alias("_event_timestamp_ms"),
+            col("__lsn").alias("_source_lsn"),
             col("kafka_timestamp").alias("_kafka_timestamp"),
         )
 
