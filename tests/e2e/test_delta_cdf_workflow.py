@@ -5,26 +5,41 @@ from datetime import datetime
 from pyspark.sql import SparkSession
 
 
+def is_delta_available():
+    """Check if Delta Lake dependencies are available."""
+    try:
+        from delta import configure_spark_with_delta_pip
+        return True
+    except ImportError:
+        return False
+
+
 @pytest.fixture(scope="module")
 def spark():
     """Provide Spark session for tests."""
-    spark = (
+    from delta import configure_spark_with_delta_pip
+
+    builder = (
         SparkSession.builder.appName("DeltaCDF_E2E_Test")
-        .config("spark.jars.packages", "io.delta:delta-core_2.12:2.4.0")
         .config("spark.sql.extensions", "io.delta.sql.DeltaSparkSessionExtension")
         .config(
             "spark.sql.catalog.spark_catalog",
             "org.apache.spark.sql.delta.catalog.DeltaCatalog",
         )
         .master("local[*]")
-        .getOrCreate()
     )
+
+    # Use configure_spark_with_delta_pip to auto-configure compatible Delta version
+    spark = configure_spark_with_delta_pip(builder).getOrCreate()
     yield spark
     spark.stop()
 
 
 @pytest.mark.e2e
-@pytest.mark.skip(reason="Requires full Spark and Delta Lake infrastructure")
+@pytest.mark.skipif(
+    not is_delta_available(),
+    reason="Requires Delta Lake dependencies to be installed"
+)
 class TestDeltaCDFWorkflow:
     """End-to-end tests for complete Delta CDF workflow."""
 
