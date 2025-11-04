@@ -670,12 +670,14 @@ class IcebergTableManager:
             logger.error(f"Failed to write data: {e}")
             raise
 
-    def overwrite_data(self, data: List[Dict[str, Any]]) -> None:
+    def overwrite_data(self, data: List[Dict[str, Any]], filter_condition: Optional[str] = None) -> None:
         """
-        Overwrite all data in the Iceberg table.
+        Overwrite data in the Iceberg table.
 
         Args:
-            data: List of records to write (replaces all existing data)
+            data: List of records to write
+            filter_condition: Optional SQL-like filter to limit overwrite scope
+                            If None, replaces all existing data
         """
         import pyarrow as pa
         from pyiceberg.types import DateType
@@ -722,9 +724,18 @@ class IcebergTableManager:
         arrow_table = pa.Table.from_arrays(arrays, schema=target_schema)
 
         try:
-            # Overwrite data (replace all existing data)
-            table.overwrite(arrow_table)
-            logger.info(f"Overwrote table with {len(data)} records")
+            if filter_condition:
+                # Conditional overwrite - delete matching rows first, then append new data
+                logger.info(f"Performing conditional overwrite with filter: {filter_condition}")
+                # First delete matching rows
+                self.delete_data(filter_condition)
+                # Then append new data
+                table.append(arrow_table)
+                logger.info(f"Conditionally overwrote data with {len(data)} records (filter: {filter_condition})")
+            else:
+                # Overwrite all data (replace all existing data)
+                table.overwrite(arrow_table)
+                logger.info(f"Overwrote table with {len(data)} records")
         except Exception as e:
             logger.error(f"Failed to overwrite data: {e}")
             raise
