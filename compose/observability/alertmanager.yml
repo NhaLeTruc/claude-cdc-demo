@@ -1,0 +1,27 @@
+services:
+  alertmanager:
+    image: prom/alertmanager:v0.26.0
+    container_name: cdc-alertmanager
+    ports:
+      - "${ALERTMANAGER_PORT:-9093}:9093"
+      - "9094:9094"
+    volumes:
+      - ../../docker/alertmanager:/etc/alertmanager:ro
+      - alertmanager_data:/alertmanager
+    command:
+      - '--config.file=/etc/alertmanager/alertmanager.yml'
+      - '--storage.path=/alertmanager'
+      - '--web.listen-address=:9093'
+      - '--cluster.listen-address='
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "--quiet", "--tries=1", "http://localhost:9093/-/healthy"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    deploy:
+      resources:
+        limits:
+          memory: 256m
+          cpus: '0.5'
+    networks:
+      - cdc-network

@@ -1,0 +1,26 @@
+services:
+  debezium:
+    build:
+      context: ../../docker/debezium
+      dockerfile: Dockerfile
+    container_name: cdc-debezium
+    depends_on:
+      - kafka
+      - postgres
+      - mysql
+      - schema-registry
+    environment:
+      BOOTSTRAP_SERVERS: kafka:9092
+      GROUP_ID: 1
+      CONFIG_STORAGE_TOPIC: debezium_configs
+      OFFSET_STORAGE_TOPIC: debezium_offsets
+      STATUS_STORAGE_TOPIC: debezium_statuses
+    ports:
+      - "${DEBEZIUM_PORT:-8083}:8083"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8083/"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - cdc-network

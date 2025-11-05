@@ -1,0 +1,27 @@
+volumes:
+  postgres_data:
+    name: cdc-postgres-data
+  mysql_data:
+    name: cdc-mysql-data
+  zookeeper_data:
+    name: cdc-zookeeper-data
+  zookeeper_logs:
+    name: cdc-zookeeper-logs
+  kafka_data:
+    name: cdc-kafka-data
+  minio_data:
+    name: cdc-minio-data
+  prometheus_data:
+    name: cdc-prometheus-data
+  grafana_data:
+    name: cdc-grafana-data
+  loki_data:
+    name: cdc-loki-data
+  alertmanager_data:
+    name: cdc-alertmanager-data
+  delta_tables:
+    name: cdc-delta-tables
+  iceberg_warehouse:
+    name: cdc-iceberg-warehouse
+  spark_checkpoints:
+    name: cdc-spark-checkpoints
