@@ -50,8 +50,8 @@ def cdc_pipeline():
     settings = get_settings()
     pipeline = MySQLCDCPipeline(
         pipeline_name="mysql_e2e_test",
-        kafka_bootstrap_servers=settings.kafka_bootstrap_servers,
-        kafka_topic=settings.mysql_kafka_topic,
+        kafka_bootstrap_servers=settings.kafka.bootstrap_servers,
+        kafka_topic="debezium.cdcdb.products",  # Default MySQL CDC topic
         delta_table_path="/tmp/delta/e2e_test/mysql_products",
         primary_key="product_id",
     )
@@ -85,7 +85,7 @@ class TestMySQLToDeltaE2E:
         # Insert record in MySQL
         mysql_connection.execute_query(
             """
-            INSERT INTO products (product_id, name, category, price, stock_quantity)
+            INSERT INTO products (product_id, product_name, category, price, stock_quantity)
             VALUES (9000, 'E2E Test Product', 'Test Category', 299.99, 150)
             """,
             fetch=False,
@@ -99,7 +99,7 @@ class TestMySQLToDeltaE2E:
         result = delta_df.filter("product_id = 9000").collect()
 
         assert len(result) == 1
-        assert result[0]["name"] == "E2E Test Product"
+        assert result[0]["product_name"] == "E2E Test Product"
         assert result[0]["price"] == 299.99
         assert result[0]["stock_quantity"] == 150
         assert result[0]["_cdc_operation"] == "INSERT"
@@ -109,9 +109,9 @@ class TestMySQLToDeltaE2E:
         # Insert initial record
         mysql_connection.execute_query(
             """
-            INSERT INTO products (product_id, name, category, price, stock_quantity)
+            INSERT INTO products (product_id, product_name, category, price, stock_quantity)
             VALUES (9001, 'Update Test', 'Test', 100.0, 50)
-            ON DUPLICATE KEY UPDATE name = 'Update Test'
+            ON DUPLICATE KEY UPDATE product_name = 'Update Test'
             """,
             fetch=False,
         )
@@ -145,9 +145,9 @@ class TestMySQLToDeltaE2E:
         # Insert record
         mysql_connection.execute_query(
             """
-            INSERT INTO products (product_id, name, category, price, stock_quantity)
+            INSERT INTO products (product_id, product_name, category, price, stock_quantity)
             VALUES (9002, 'Delete Test', 'Test', 100.0, 50)
-            ON DUPLICATE KEY UPDATE name = 'Delete Test'
+            ON DUPLICATE KEY UPDATE product_name = 'Delete Test'
             """,
             fetch=False,
         )
@@ -186,7 +186,7 @@ class TestMySQLToDeltaE2E:
         for i in range(0, len(values), batch_size):
             batch = values[i : i + batch_size]
             insert_query = f"""
-                INSERT INTO products (product_id, name, category, price, stock_quantity)
+                INSERT INTO products (product_id, product_name, category, price, stock_quantity)
                 VALUES {','.join(batch)}
             """
             mysql_connection.execute_query(insert_query, fetch=False)
@@ -207,9 +207,9 @@ class TestMySQLToDeltaE2E:
         # Insert test data
         mysql_connection.execute_query(
             """
-            INSERT INTO products (product_id, name, category, price, stock_quantity)
+            INSERT INTO products (product_id, product_name, category, price, stock_quantity)
             VALUES (9700, 'Quality Test', 'Test', 100.0, 50)
-            ON DUPLICATE KEY UPDATE name = 'Quality Test'
+            ON DUPLICATE KEY UPDATE product_name = 'Quality Test'
             """,
             fetch=False,
         )
@@ -242,9 +242,9 @@ class TestMySQLToDeltaE2E:
 
         mysql_connection.execute_query(
             """
-            INSERT INTO products (product_id, name, category, price, stock_quantity, created_at)
+            INSERT INTO products (product_id, product_name, category, price, stock_quantity, created_at)
             VALUES (9800, 'Lag Test', 'Test', 100.0, 50, NOW())
-            ON DUPLICATE KEY UPDATE name = 'Lag Test'
+            ON DUPLICATE KEY UPDATE product_name = 'Lag Test'
             """,
             fetch=False,
         )
@@ -268,9 +268,9 @@ class TestMySQLToDeltaE2E:
         # Insert record before schema change
         mysql_connection.execute_query(
             """
-            INSERT INTO products (product_id, name, category, price, stock_quantity)
+            INSERT INTO products (product_id, product_name, category, price, stock_quantity)
             VALUES (9900, 'Schema Test', 'Test', 100.0, 50)
-            ON DUPLICATE KEY UPDATE name = 'Schema Test'
+            ON DUPLICATE KEY UPDATE product_name = 'Schema Test'
             """,
             fetch=False,
         )
@@ -293,7 +293,7 @@ class TestMySQLToDeltaE2E:
 
         mysql_connection.execute_query(
             """
-            INSERT INTO products (product_id, name, category, price, stock_quantity)
+            INSERT INTO products (product_id, product_name, category, price, stock_quantity)
             VALUES (9950, 'Txn Product 1', 'Test', 100.0, 50)
             """,
             fetch=False,
@@ -301,7 +301,7 @@ class TestMySQLToDeltaE2E:
 
         mysql_connection.execute_query(
             """
-            INSERT INTO products (product_id, name, category, price, stock_quantity)
+            INSERT INTO products (product_id, product_name, category, price, stock_quantity)
             VALUES (9951, 'Txn Product 2', 'Test', 200.0, 75)
             """,
             fetch=False,
