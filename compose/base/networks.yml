@@ -1,0 +1,4 @@
+networks:
+  cdc-network:
+    name: cdc-network
+    driver: bridge
