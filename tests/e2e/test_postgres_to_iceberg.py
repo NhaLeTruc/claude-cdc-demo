@@ -7,10 +7,6 @@ import time
 
 
 @pytest.mark.e2e
-@pytest.mark.skipif(
-    reason="Requires complete infrastructure stack and streaming pipelines running",
-    condition=True,  # Iceberg E2E tests are incomplete - infrastructure not fully configured
-)
 class TestPostgresToIcebergE2E:
     """End-to-end tests for complete cross-storage CDC workflow."""
 
