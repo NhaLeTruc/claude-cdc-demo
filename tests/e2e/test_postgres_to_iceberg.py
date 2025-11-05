@@ -33,11 +33,15 @@ class TestPostgresToIcebergE2E:
         )
         pg_cursor = pg_conn.cursor()
 
-        # Step 3: Get initial row count
+        # Step 3: Clean up any existing test data
+        pg_cursor.execute("DELETE FROM customers WHERE email LIKE 'e2e_test_%@example.com'")
+        pg_conn.commit()
+
+        # Step 4: Get initial row count
         pg_cursor.execute("SELECT COUNT(*) FROM customers")
         initial_pg_count = pg_cursor.fetchone()[0]
 
-        # Step 4: Insert test dataset
+        # Step 5: Insert test dataset
         test_customers = [
             {
                 "email": f"e2e_test_{i}@example.com",
@@ -72,10 +76,10 @@ class TestPostgresToIcebergE2E:
 
         pg_conn.commit()
 
-        # Step 5: Verify Debezium captured changes
+        # Step 6: Verify Debezium captured changes
         kafka_consumer = KafkaConsumer(
             "debezium.public.customers",
-            bootstrap_servers="localhost:9092",
+            bootstrap_servers="localhost:29092",
             auto_offset_reset="latest",
             consumer_timeout_ms=30000,
         )
@@ -93,10 +97,10 @@ class TestPostgresToIcebergE2E:
 
         assert len(captured_ids) == len(customer_ids), "Not all changes captured by Debezium"
 
-        # Step 6: Wait for Spark processing
+        # Step 7: Wait for Spark processing
         time.sleep(20)
 
-        # Step 7: Verify data in Iceberg
+        # Step 8: Verify data in Iceberg
         iceberg_config = IcebergTableConfig(
             catalog_name="demo_catalog",
             namespace="cdc_demo",
@@ -252,6 +256,10 @@ class TestPostgresToIcebergE2E:
         )
         pg_cursor = pg_conn.cursor()
 
+        # Clean up any existing test data
+        pg_cursor.execute("DELETE FROM customers WHERE email = 'recovery_test@example.com'")
+        pg_conn.commit()
+
         pg_cursor.execute(
             """
             INSERT INTO customers (email, first_name, last_name)
@@ -286,9 +294,15 @@ class TestPostgresToIcebergE2E:
         time.sleep(30)
 
         # Verify update was processed
-        from src.cdc_pipelines.iceberg.table_manager import IcebergTableManager
+        from src.cdc_pipelines.iceberg.table_manager import IcebergTableManager, IcebergTableConfig
 
-        iceberg_manager = IcebergTableManager(...)
+        config = IcebergTableConfig(
+            catalog_name="demo_catalog",
+            namespace="cdc",
+            table_name="customers",
+            warehouse_path="s3://warehouse/iceberg",
+        )
+        iceberg_manager = IcebergTableManager(config)
         result = iceberg_manager.query_table(
             filter_condition=f"customer_id = {customer_id}"
         )
@@ -313,6 +327,10 @@ class TestPostgresToIcebergE2E:
             password=os.getenv("POSTGRES_PASSWORD", "cdcpass"),
         )
         pg_cursor = pg_conn.cursor()
+
+        # Clean up any existing test data
+        pg_cursor.execute("DELETE FROM customers WHERE email LIKE 'large_scale_%@example.com'")
+        pg_conn.commit()
 
         # Insert 10K records
         start_time = time.time()
@@ -339,9 +357,15 @@ class TestPostgresToIcebergE2E:
         time.sleep(60)
 
         # Verify all records
-        from src.cdc_pipelines.iceberg.table_manager import IcebergTableManager
+        from src.cdc_pipelines.iceberg.table_manager import IcebergTableManager, IcebergTableConfig
 
-        iceberg_manager = IcebergTableManager(...)
+        config = IcebergTableConfig(
+            catalog_name="demo_catalog",
+            namespace="cdc",
+            table_name="customers",
+            warehouse_path="s3://warehouse/iceberg",
+        )
+        iceberg_manager = IcebergTableManager(config)
         # Query in batches to avoid memory issues
         total_found = 0
         batch_size = 1000
