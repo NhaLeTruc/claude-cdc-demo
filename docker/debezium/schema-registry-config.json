@@ -1,0 +1,83 @@
+{
+  "name": "postgres-connector-avro",
+  "config": {
+    "_comment_connector": "PostgreSQL Debezium connector configuration with Avro serialization and Schema Registry",
+
+    "connector.class": "io.debezium.connector.postgresql.PostgresConnector",
+
+    "_comment_database": "Database connection settings",
+    "database.hostname": "postgres",
+    "database.port": "5432",
+    "database.user": "cdcuser",
+    "database.password": "cdcpass",
+    "database.dbname": "cdcdb",
+    "database.server.name": "debezium",
+
+    "_comment_tables": "Table filtering - public.* captures all tables in public schema",
+    "table.include.list": "public.*",
+
+    "_comment_plugin": "PostgreSQL logical decoding plugin",
+    "plugin.name": "pgoutput",
+    "publication.name": "dbz_publication",
+    "slot.name": "debezium_avro",
+
+    "_comment_key_converter": "Avro converter for message keys with Schema Registry",
+    "key.converter": "io.confluent.connect.avro.AvroConverter",
+    "key.converter.schema.registry.url": "http://schema-registry:8081",
+    "key.converter.schemas.enable": "true",
+
+    "_comment_value_converter": "Avro converter for message values with Schema Registry",
+    "value.converter": "io.confluent.connect.avro.AvroConverter",
+    "value.converter.schema.registry.url": "http://schema-registry:8081",
+    "value.converter.schemas.enable": "true",
+
+    "_comment_topic": "Kafka topic naming",
+    "topic.prefix": "debezium",
+
+    "_comment_schema_history": "Schema change tracking in Kafka topic",
+    "schema.history.internal.kafka.bootstrap.servers": "kafka:9092",
+    "schema.history.internal.kafka.topic": "schema-changes.debezium",
+
+    "_comment_schema_changes": "Include schema change events in output",
+    "include.schema.changes": "true",
+
+    "_comment_transforms": "Optional: Route messages to topics",
+    "transforms": "route",
+    "transforms.route.type": "org.apache.kafka.connect.transforms.RegexRouter",
+    "transforms.route.regex": "([^.]+)\\.([^.]+)\\.([^.]+)",
+    "transforms.route.replacement": "$1.$2.$3"
+  },
+
+  "_schema_registry_benefits": {
+    "description": "Benefits of using Schema Registry with Debezium",
+    "advantages": [
+      "Schema versioning: Track schema evolution over time",
+      "Schema validation: Ensure compatibility between producers and consumers",
+      "Reduced message size: Schema stored centrally, not in each message",
+      "Schema compatibility: Support BACKWARD, FORWARD, FULL compatibility modes",
+      "Schema discovery: Easy lookup of available schemas via REST API"
+    ]
+  },
+
+  "_schema_compatibility_modes": {
+    "BACKWARD": "New schema can read data written with old schema (default)",
+    "FORWARD": "Old schema can read data written with new schema",
+    "FULL": "Both BACKWARD and FORWARD compatibility",
+    "NONE": "No compatibility checking"
+  },
+
+  "_schema_registry_endpoints": {
+    "list_subjects": "GET http://localhost:8081/subjects",
+    "get_latest_schema": "GET http://localhost:8081/subjects/{subject-name}/versions/latest",
+    "get_schema_by_id": "GET http://localhost:8081/schemas/ids/{id}",
+    "register_schema": "POST http://localhost:8081/subjects/{subject-name}/versions",
+    "test_compatibility": "POST http://localhost:8081/compatibility/subjects/{subject-name}/versions/latest"
+  },
+
+  "_usage_notes": {
+    "subject_naming": "Subject names follow pattern: {topic-prefix}.{database}.{table}-{key|value}",
+    "example_subject": "debezium.public.customers-value",
+    "schema_evolution": "Schema changes (ADD COLUMN, ALTER TYPE, etc.) automatically tracked",
+    "consumer_compatibility": "Consumers must use AvroConverter or KafkaAvroDeserializer"
+  }
+}
