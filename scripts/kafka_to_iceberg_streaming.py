@@ -102,8 +102,8 @@ class KafkaToIcebergStreamingJob:
             .config(f"spark.sql.catalog.{self.iceberg_catalog}.type", "hadoop")
             .config(f"spark.sql.catalog.{self.iceberg_catalog}.warehouse", self.iceberg_warehouse)
             .config("spark.jars.packages",
-                    "org.apache.iceberg:iceberg-spark-runtime-3.3_2.12:1.4.0,"
-                    "org.apache.spark:spark-sql-kafka-0-10_2.12:3.3.0")
+                    "org.apache.iceberg:iceberg-spark-runtime-3.5_2.12:1.5.2,"
+                    "org.apache.spark:spark-sql-kafka-0-10_2.12:3.5.0")
             .config("spark.sql.streaming.checkpointLocation", self.checkpoint_location)
             .config("spark.sql.adaptive.enabled", "true")
             .master("local[*]")
@@ -293,6 +293,53 @@ class KafkaToIcebergStreamingJob:
 
         return transformed_df
 
+    def create_iceberg_table_if_not_exists(self) -> None:
+        """
+        Create Iceberg table if it doesn't exist.
+
+        Creates the namespace and table with appropriate schema.
+        """
+        table_identifier = f"{self.iceberg_catalog}.{self.iceberg_namespace}.{self.iceberg_table}"
+
+        # Create namespace if it doesn't exist
+        try:
+            self.spark.sql(f"CREATE NAMESPACE IF NOT EXISTS {self.iceberg_catalog}.{self.iceberg_namespace}")
+            logger.info(f"Ensured namespace exists: {self.iceberg_catalog}.{self.iceberg_namespace}")
+        except Exception as e:
+            logger.warning(f"Could not create namespace: {e}")
+
+        # Check if table exists
+        try:
+            self.spark.sql(f"DESC TABLE {table_identifier}")
+            logger.info(f"Table already exists: {table_identifier}")
+        except Exception:
+            # Table doesn't exist, create it
+            logger.info(f"Creating Iceberg table: {table_identifier}")
+            create_table_sql = f"""
+                CREATE TABLE {table_identifier} (
+                    customer_id BIGINT,
+                    email STRING,
+                    full_name STRING,
+                    location STRING,
+                    customer_tier STRING,
+                    lifetime_value DOUBLE,
+                    registration_date TIMESTAMP,
+                    is_active BOOLEAN,
+                    total_orders INT,
+                    _ingestion_timestamp TIMESTAMP,
+                    _source_system STRING,
+                    _cdc_operation STRING,
+                    _pipeline_id STRING,
+                    _processed_timestamp TIMESTAMP,
+                    _event_timestamp_ms BIGINT,
+                    _source_lsn BIGINT,
+                    _kafka_timestamp TIMESTAMP
+                )
+                USING iceberg
+            """
+            self.spark.sql(create_table_sql)
+            logger.info(f"Created Iceberg table: {table_identifier}")
+
     def write_to_iceberg(self, df: DataFrame) -> None:
         """
         Write transformed data to Iceberg table.
@@ -334,6 +381,9 @@ class KafkaToIcebergStreamingJob:
 
         # Create Spark session
         self.spark = self.create_spark_session()
+
+        # Create Iceberg table if needed
+        self.create_iceberg_table_if_not_exists()
 
         # Read from Kafka
         kafka_df = self.read_from_kafka()
