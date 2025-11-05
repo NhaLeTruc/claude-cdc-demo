@@ -28,6 +28,44 @@ def is_schema_registry_available():
         return False
 
 
+def is_cdc_infrastructure_running():
+    """Check if full CDC infrastructure (Debezium + Kafka + Schema Registry) is running."""
+    try:
+        # Check Debezium connector (try both possible names)
+        connector_name = None
+        for name in ["postgres-connector", "postgres-cdc-connector"]:
+            response = requests.get(
+                f"http://localhost:8083/connectors/{name}/status",
+                timeout=2
+            )
+            if response.status_code == 200:
+                connector_name = name
+                break
+
+        if not connector_name:
+            return False
+
+        status = response.json()
+        connector_state = status.get("connector", {}).get("state")
+        if connector_state != "RUNNING":
+            return False
+
+        # Check Kafka broker
+        import socket
+        sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        sock.settimeout(1)
+        result = sock.connect_ex(('localhost', 29092))
+        sock.close()
+        if result != 0:
+            return False
+
+        # Check Schema Registry
+        return is_schema_registry_available()
+    except Exception:
+        pass
+    return False
+
+
 def get_schema_registry_url():
     """Get Schema Registry URL from environment."""
     return os.getenv("SCHEMA_REGISTRY_URL", "http://localhost:8081")
@@ -104,6 +142,10 @@ def test_table(postgres_conn):
 class TestPostgresSchemaEvolution:
     """Integration tests for Postgres CDC schema evolution."""
 
+    @pytest.mark.skipif(
+        not is_cdc_infrastructure_running(),
+        reason="Requires full CDC pipeline setup with Debezium, Kafka, and Schema Registry running"
+    )
     def test_add_column_propagates_through_cdc(self, test_table, postgres_conn):
         """
         Test ADD COLUMN scenario through full CDC pipeline.
