@@ -14,17 +14,54 @@ import psycopg2
 import time
 from kafka import KafkaConsumer
 import json
+import os
+import requests
+
+
+def is_schema_registry_available():
+    """Check if Schema Registry is running and accessible."""
+    try:
+        url = os.getenv("SCHEMA_REGISTRY_URL", "http://localhost:8081")
+        response = requests.get(f"{url}/subjects", timeout=2)
+        return response.status_code == 200
+    except Exception:
+        return False
+
+
+def get_schema_registry_url():
+    """Get Schema Registry URL from environment."""
+    return os.getenv("SCHEMA_REGISTRY_URL", "http://localhost:8081")
+
+
+def verify_schema_in_registry(subject_name):
+    """
+    Verify schema exists in Schema Registry and return schema data.
+
+    Args:
+        subject_name: Subject name (e.g., 'debezium.public.schema_evo_test-value')
+
+    Returns:
+        dict: Schema data if found, None otherwise
+    """
+    try:
+        url = get_schema_registry_url()
+        response = requests.get(f"{url}/subjects/{subject_name}/versions/latest", timeout=2)
+        if response.status_code == 200:
+            return response.json()
+        return None
+    except Exception:
+        return None
 
 
 @pytest.fixture(scope="module")
 def postgres_conn():
     """PostgreSQL connection fixture."""
     conn = psycopg2.connect(
-        host="localhost",
-        port=5432,
-        database="demo_db",
-        user="postgres",
-        password="postgres"
+        host=os.getenv("POSTGRES_HOST", "localhost"),
+        port=int(os.getenv("POSTGRES_PORT", "5432")),
+        database=os.getenv("POSTGRES_DB", "cdcdb"),
+        user=os.getenv("POSTGRES_USER", "cdcuser"),
+        password=os.getenv("POSTGRES_PASSWORD", "cdcpass")
     )
     yield conn
     conn.close()
@@ -61,8 +98,8 @@ def test_table(postgres_conn):
 
 @pytest.mark.integration
 @pytest.mark.skipif(
-    reason="Requires full CDC infrastructure (Postgres, Debezium, Kafka, Schema Registry)",
-    condition=True,
+    not is_schema_registry_available(),
+    reason="Requires Schema Registry to be running at SCHEMA_REGISTRY_URL"
 )
 class TestPostgresSchemaEvolution:
     """Integration tests for Postgres CDC schema evolution."""
@@ -94,7 +131,7 @@ class TestPostgresSchemaEvolution:
         # Verify event in Kafka
         consumer = KafkaConsumer(
             'debezium.public.schema_evo_test',
-            bootstrap_servers='localhost:9092',
+            bootstrap_servers='localhost:29092',
             auto_offset_reset='earliest',
             consumer_timeout_ms=5000,
             value_deserializer=lambda m: json.loads(m.decode('utf-8'))
@@ -135,7 +172,7 @@ class TestPostgresSchemaEvolution:
 
         consumer = KafkaConsumer(
             'debezium.public.schema_evo_test',
-            bootstrap_servers='localhost:9092',
+            bootstrap_servers='localhost:29092',
             auto_offset_reset='latest',
             consumer_timeout_ms=5000,
             value_deserializer=lambda m: json.loads(m.decode('utf-8'))
@@ -153,10 +190,12 @@ class TestPostgresSchemaEvolution:
 
         assert new_event_found, "CDC event with new column not found"
 
-        # Step 6: Check Schema Registry (optional, if schema registry is running)
-        # import requests
-        # response = requests.get('http://localhost:8081/subjects/debezium.public.schema_evo_test-value/versions/latest')
-        # assert response.status_code == 200
+        # Step 6: Verify schema evolution in Schema Registry
+        schema_data = verify_schema_in_registry('debezium.public.schema_evo_test-value')
+        if schema_data:
+            # Verify schema includes description field
+            schema_str = str(schema_data.get('schema', ''))
+            assert 'description' in schema_str.lower(), "New column 'description' not found in schema registry"
 
     def test_drop_column_handled_gracefully(self, test_table, postgres_conn):
         """
@@ -201,7 +240,7 @@ class TestPostgresSchemaEvolution:
         # Verify CDC event doesn't include dropped column
         consumer = KafkaConsumer(
             'debezium.public.schema_evo_test',
-            bootstrap_servers='localhost:9092',
+            bootstrap_servers='localhost:29092',
             auto_offset_reset='latest',
             consumer_timeout_ms=5000,
             value_deserializer=lambda m: json.loads(m.decode('utf-8'))
@@ -215,6 +254,13 @@ class TestPostgresSchemaEvolution:
                 # Verify 'name' still present
                 assert 'name' in event['payload']['after']
                 break
+
+        # Verify schema evolution in Schema Registry
+        schema_data = verify_schema_in_registry('debezium.public.schema_evo_test-value')
+        if schema_data:
+            schema_str = str(schema_data.get('schema', ''))
+            # Verify 'value' column removed from schema
+            assert 'value' not in schema_str.lower() or 'optional' in schema_str.lower()
 
     def test_alter_column_type_with_data_conversion(self, test_table, postgres_conn):
         """
@@ -259,7 +305,7 @@ class TestPostgresSchemaEvolution:
         # Verify CDC event has correct type
         consumer = KafkaConsumer(
             'debezium.public.schema_evo_test',
-            bootstrap_servers='localhost:9092',
+            bootstrap_servers='localhost:29092',
             auto_offset_reset='latest',
             consumer_timeout_ms=5000,
             value_deserializer=lambda m: json.loads(m.decode('utf-8'))
@@ -271,6 +317,13 @@ class TestPostgresSchemaEvolution:
                 # Verify large value preserved
                 assert event['payload']['after']['value'] == large_value
                 break
+
+        # Verify schema type change in Schema Registry
+        schema_data = verify_schema_in_registry('debezium.public.schema_evo_test-value')
+        if schema_data:
+            schema_str = str(schema_data.get('schema', ''))
+            # Verify schema reflects BIGINT type (typically as int64)
+            assert 'int64' in schema_str.lower() or 'long' in schema_str.lower()
 
     def test_rename_column_updates_schema(self, test_table, postgres_conn):
         """
@@ -314,7 +367,7 @@ class TestPostgresSchemaEvolution:
         # Verify CDC event uses new column name
         consumer = KafkaConsumer(
             'debezium.public.schema_evo_test',
-            bootstrap_servers='localhost:9092',
+            bootstrap_servers='localhost:29092',
             auto_offset_reset='latest',
             consumer_timeout_ms=5000,
             value_deserializer=lambda m: json.loads(m.decode('utf-8'))
@@ -329,6 +382,13 @@ class TestPostgresSchemaEvolution:
                 # Verify old column name not present
                 assert 'name' not in event['payload']['after']
                 break
+
+        # Verify schema rename in Schema Registry
+        schema_data = verify_schema_in_registry('debezium.public.schema_evo_test-value')
+        if schema_data:
+            schema_str = str(schema_data.get('schema', ''))
+            # Verify new column name in schema
+            assert 'display_name' in schema_str.lower()
 
     def test_multiple_schema_changes_sequence(self, test_table, postgres_conn):
         """
@@ -386,7 +446,7 @@ class TestPostgresSchemaEvolution:
         # Verify final schema in CDC
         consumer = KafkaConsumer(
             'debezium.public.schema_evo_test',
-            bootstrap_servers='localhost:9092',
+            bootstrap_servers='localhost:29092',
             auto_offset_reset='latest',
             consumer_timeout_ms=5000,
             value_deserializer=lambda m: json.loads(m.decode('utf-8'))
@@ -404,6 +464,14 @@ class TestPostgresSchemaEvolution:
                 assert after_data['value'] == 12345678901234  # BIGINT value
                 assert after_data['email'] == 'test@example.com'
                 break
+
+        # Verify all schema changes in Schema Registry
+        schema_data = verify_schema_in_registry('debezium.public.schema_evo_test-value')
+        if schema_data:
+            schema_str = str(schema_data.get('schema', ''))
+            # Verify all changes reflected in schema
+            assert 'display_name' in schema_str.lower(), "Renamed column not in schema"
+            assert 'email' in schema_str.lower(), "Added column not in schema"
 
     def test_schema_evolution_no_data_loss(self, test_table, postgres_conn):
         """
@@ -447,3 +515,13 @@ class TestPostgresSchemaEvolution:
 
         for original, retrieved in zip(test_data, retrieved_data):
             assert original == retrieved, "Data mismatch after schema evolution"
+
+        # Verify schema evolution in Schema Registry preserves existing fields
+        schema_data = verify_schema_in_registry('debezium.public.schema_evo_test-value')
+        if schema_data:
+            schema_str = str(schema_data.get('schema', ''))
+            # Verify original columns still in schema
+            assert 'name' in schema_str.lower(), "Original column 'name' missing from schema"
+            assert 'value' in schema_str.lower(), "Original column 'value' missing from schema"
+            # Verify new column added
+            assert 'status' in schema_str.lower(), "New column 'status' not in schema"

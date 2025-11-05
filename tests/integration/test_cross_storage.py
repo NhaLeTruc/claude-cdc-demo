@@ -13,10 +13,9 @@ except ImportError:
 
 
 @pytest.mark.integration
-@pytest.mark.skip(reason="Cross-storage tests require full CDC pipeline setup (Debezium connectors, Spark jobs) - tests are incomplete stubs")
 @pytest.mark.skipif(
     not PYICEBERG_AVAILABLE,
-    reason="Requires full infrastructure (Postgres, Kafka, Debezium, Spark, Iceberg)"
+    reason="Requires PyIceberg package"
 )
 class TestCrossStorageCDC:
     """Integration tests for Postgres to Iceberg cross-storage CDC."""
@@ -59,7 +58,7 @@ class TestCrossStorageCDC:
         # Step 3: Verify event in Kafka
         consumer = KafkaConsumer(
             "debezium.public.customers",
-            bootstrap_servers="localhost:9092",
+            bootstrap_servers="localhost:29092",
             auto_offset_reset="earliest",
             consumer_timeout_ms=10000,
         )
@@ -96,11 +95,11 @@ class TestCrossStorageCDC:
         import psycopg2
 
         conn = psycopg2.connect(
-            host="localhost",
-            port=5432,
-            database="demo_db",
-            user="postgres",
-            password="postgres",
+            host=os.getenv("POSTGRES_HOST", "localhost"),
+            port=int(os.getenv("POSTGRES_PORT", "5432")),
+            database=os.getenv("POSTGRES_DB", "cdcdb"),
+            user=os.getenv("POSTGRES_USER", "cdcuser"),
+            password=os.getenv("POSTGRES_PASSWORD", "cdcpass"),
         )
         cursor = conn.cursor()
 
@@ -155,11 +154,11 @@ class TestCrossStorageCDC:
         import psycopg2
 
         conn = psycopg2.connect(
-            host="localhost",
-            port=5432,
-            database="demo_db",
-            user="postgres",
-            password="postgres",
+            host=os.getenv("POSTGRES_HOST", "localhost"),
+            port=int(os.getenv("POSTGRES_PORT", "5432")),
+            database=os.getenv("POSTGRES_DB", "cdcdb"),
+            user=os.getenv("POSTGRES_USER", "cdcuser"),
+            password=os.getenv("POSTGRES_PASSWORD", "cdcpass"),
         )
         cursor = conn.cursor()
 
@@ -225,11 +224,11 @@ class TestCrossStorageCDC:
         import psycopg2
 
         conn = psycopg2.connect(
-            host="localhost",
-            port=5432,
-            database="demo_db",
-            user="postgres",
-            password="postgres",
+            host=os.getenv("POSTGRES_HOST", "localhost"),
+            port=int(os.getenv("POSTGRES_PORT", "5432")),
+            database=os.getenv("POSTGRES_DB", "cdcdb"),
+            user=os.getenv("POSTGRES_USER", "cdcuser"),
+            password=os.getenv("POSTGRES_PASSWORD", "cdcpass"),
         )
         cursor = conn.cursor()
 
@@ -291,12 +290,12 @@ class TestCrossStorageCDC:
         from kafka.admin import KafkaAdminClient, NewTopic
 
         # Create test topic
-        admin = KafkaAdminClient(bootstrap_servers="localhost:9092")
+        admin = KafkaAdminClient(bootstrap_servers="localhost:29092")
 
         # Consume from beginning
         consumer = KafkaConsumer(
             "debezium.public.customers",
-            bootstrap_servers="localhost:9092",
+            bootstrap_servers="localhost:29092",
             auto_offset_reset="earliest",
             group_id="test_cross_storage_group",
         )
@@ -319,7 +318,7 @@ class TestCrossStorageCDC:
 
         new_consumer = KafkaConsumer(
             "debezium.public.customers",
-            bootstrap_servers="localhost:9092",
+            bootstrap_servers="localhost:29092",
             group_id="test_cross_storage_group",
         )
 
@@ -335,11 +334,11 @@ class TestCrossStorageCDC:
         import psycopg2
 
         conn = psycopg2.connect(
-            host="localhost",
-            port=5432,
-            database="demo_db",
-            user="postgres",
-            password="postgres",
+            host=os.getenv("POSTGRES_HOST", "localhost"),
+            port=int(os.getenv("POSTGRES_PORT", "5432")),
+            database=os.getenv("POSTGRES_DB", "cdcdb"),
+            user=os.getenv("POSTGRES_USER", "cdcuser"),
+            password=os.getenv("POSTGRES_PASSWORD", "cdcpass"),
         )
         cursor = conn.cursor()
 
