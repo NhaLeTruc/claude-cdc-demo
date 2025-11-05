@@ -71,7 +71,12 @@ def create_postgres_connector(
     """Create Debezium PostgreSQL connector."""
 
     # Get configuration from environment or use defaults
-    hostname = database_hostname or os.getenv("POSTGRES_HOST", "cdc-postgres")
+    # For Debezium connector, use Docker service name (postgres) not localhost
+    default_hostname = os.getenv("POSTGRES_HOST", "postgres")
+    if default_hostname == "localhost":
+        default_hostname = "postgres"  # Use Docker service name for internal communication
+
+    hostname = database_hostname or default_hostname
     port = database_port or int(os.getenv("POSTGRES_PORT", "5432"))
     user = database_user or os.getenv("POSTGRES_USER", "cdcuser")
     password = database_password or os.getenv("POSTGRES_PASSWORD", "cdcpass")
