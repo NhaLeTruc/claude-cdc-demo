@@ -329,6 +329,56 @@ services:
     networks:
       - cdc-network
 
+  # CDC Infrastructure Initialization & Streaming
+  cdc-init:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: cdc-init
+    depends_on:
+      debezium:
+        condition: service_healthy
+      postgres:
+        condition: service_healthy
+      mysql:
+        condition: service_healthy
+      kafka:
+        condition: service_healthy
+      iceberg-rest:
+        condition: service_healthy
+    volumes:
+      - ./scripts:/app/scripts:ro
+      - ./src:/app/src:ro
+      - ./.env:/app/.env:ro
+      - delta_tables:/tmp/delta
+      - iceberg_warehouse:/tmp/iceberg_warehouse
+      - spark_checkpoints:/tmp/spark-checkpoints
+    working_dir: /app
+    environment:
+      - PYTHONPATH=/app
+      - KAFKA_BOOTSTRAP_SERVERS=kafka:9092
+      - DEBEZIUM_HOST=debezium
+      - DEBEZIUM_PORT=8083
+      - POSTGRES_HOST=postgres
+      - POSTGRES_PORT=5432
+      - POSTGRES_USER=cdcuser
+      - POSTGRES_PASSWORD=cdcpass
+      - POSTGRES_DB=cdcdb
+      - MYSQL_HOST=mysql
+      - MYSQL_PORT=3306
+      - MYSQL_USER=cdcuser
+      - MYSQL_PASSWORD=cdcpass
+      - MYSQL_DB=cdcdb
+    command: bash scripts/infrastructure/init-all.sh
+    restart: unless-stopped
+    networks:
+      - cdc-network
+    deploy:
+      resources:
+        limits:
+          memory: 2g
+          cpus: '1.0'
+
 volumes:
   postgres_data:
   mysql_data:
@@ -340,6 +390,9 @@ volumes:
   grafana_data:
   loki_data:
   alertmanager_data:
+  delta_tables:
+  iceberg_warehouse:
+  spark_checkpoints:
 
 networks:
   cdc-network:

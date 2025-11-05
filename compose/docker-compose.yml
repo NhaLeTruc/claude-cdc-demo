@@ -1,0 +1,30 @@
+# Modular Docker Compose configuration for CDC Demo
+# All services are organized into functional components for better maintainability
+
+include:
+  # Base infrastructure (networks and volumes)
+  - compose/base/networks.yml
+  - compose/base/volumes.yml
+
+  # Database sources
+  - compose/databases/postgres.yml
+  - compose/databases/mysql.yml
+
+  # Streaming infrastructure
+  - compose/streaming/kafka.yml
+  - compose/streaming/schema-registry.yml
+
+  # CDC components
+  - compose/cdc/debezium.yml
+  - compose/cdc/cdc-init.yml
+
+  # Storage layer
+  - compose/storage/minio.yml
+  - compose/storage/iceberg.yml
+  - compose/storage/spark.yml
+
+  # Observability stack
+  - compose/observability/prometheus.yml
+  - compose/observability/grafana.yml
+  - compose/observability/loki.yml
+  - compose/observability/alertmanager.yml
