@@ -345,12 +345,18 @@ class TestAlertDelivery:
 
     def test_webhook_delivery(self):
         """Test webhook alert delivery."""
-        # This would require a test webhook receiver
-        # For now, we'll just verify the configuration
-        pytest.skip("Requires test webhook receiver setup")
+        import os
+        webhook_url = os.getenv("ALERT_WEBHOOK_URL", "")
+        if not webhook_url:
+            pytest.skip("Requires ALERT_WEBHOOK_URL environment variable to be set")
 
     def test_email_delivery_configuration(self, alertmanager_url):
         """Test that email delivery is configured."""
+        import os
+        email_to = os.getenv("ALERT_EMAIL_TO", "")
+        if not email_to:
+            pytest.skip("Requires ALERT_EMAIL_TO environment variable to be set")
+
         response = requests.get(f"{alertmanager_url}/api/v1/status")
         data = response.json()
 
@@ -373,6 +379,11 @@ class TestAlertDelivery:
 
     def test_slack_delivery_configuration(self, alertmanager_url):
         """Test that Slack delivery is configured."""
+        import os
+        slack_webhook = os.getenv("ALERT_SLACK_WEBHOOK_URL", "")
+        if not slack_webhook:
+            pytest.skip("Requires ALERT_SLACK_WEBHOOK_URL environment variable to be set")
+
         response = requests.get(f"{alertmanager_url}/api/v1/status")
         data = response.json()
 
@@ -448,20 +459,25 @@ class TestAlertDelivery:
 
 
 @pytest.mark.integration
-@pytest.mark.skipif(
-    reason="Requires actual notification endpoints configured",
-    condition=True,
-)
 class TestActualAlertDelivery:
     """Tests that require actual notification delivery (email, Slack, etc.)."""
 
     def test_email_delivery_end_to_end(self):
         """Test actual email delivery."""
+        import os
+        email_to = os.getenv("ALERT_EMAIL_TO", "")
+        email_from = os.getenv("ALERT_EMAIL_FROM", "")
+        if not email_to or not email_from:
+            pytest.skip("Requires ALERT_EMAIL_TO and ALERT_EMAIL_FROM environment variables to be set")
         # Would require SMTP server or email service integration
         pytest.skip("Requires SMTP server configuration")
 
     def test_slack_delivery_end_to_end(self):
         """Test actual Slack delivery."""
+        import os
+        slack_webhook = os.getenv("ALERT_SLACK_WEBHOOK_URL", "")
+        if not slack_webhook:
+            pytest.skip("Requires ALERT_SLACK_WEBHOOK_URL environment variable to be set")
         # Would require valid Slack webhook
         pytest.skip("Requires valid Slack webhook configuration")
 
