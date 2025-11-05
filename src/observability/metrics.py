@@ -95,6 +95,26 @@ mysql_binlog_position = Gauge(
     ["server", "binlog_file"],
 )
 
+# Delta Write Metrics
+delta_writes_total = Counter(
+    "delta_writes_total",
+    "Total number of writes to Delta Lake",
+    ["table", "operation"],
+)
+
+delta_write_errors_total = Counter(
+    "delta_write_errors_total",
+    "Total number of Delta Lake write errors",
+    ["table", "error_type"],
+)
+
+delta_write_duration_seconds = Histogram(
+    "delta_write_duration_seconds",
+    "Duration of Delta Lake write operations",
+    ["table", "operation"],
+    buckets=[0.01, 0.05, 0.1, 0.5, 1.0, 5.0, 10.0, 30.0, 60.0],
+)
+
 # DeltaLake CDC Specific Metrics
 deltalake_cdf_events_processed_total = Counter(
     "deltalake_cdf_events_processed_total",
