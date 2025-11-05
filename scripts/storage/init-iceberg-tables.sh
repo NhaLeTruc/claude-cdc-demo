@@ -6,7 +6,7 @@ set -e
 echo "Initializing Apache Iceberg tables..."
 
 python3 <<EOF
-from pyiceberg.catalog import load_catalog
+from pyiceberg.catalog.rest import RestCatalog
 from pyiceberg.schema import Schema
 from pyiceberg.types import (
     NestedField,
@@ -16,12 +16,25 @@ from pyiceberg.types import (
     TimestampType,
 )
 
-# Load catalog (using local filesystem for demo)
-catalog = load_catalog("demo", **{
-    "type": "rest",
-    "uri": "http://localhost:8181",
-    "warehouse": "./iceberg-warehouse"
-})
+# Load REST catalog
+catalog = RestCatalog(
+    "demo_catalog",
+    **{
+        "uri": "http://iceberg-rest:8181",
+        "s3.endpoint": "http://minio:9000",
+        "s3.access-key-id": "minioadmin",
+        "s3.secret-access-key": "minioadmin",
+        "s3.path-style-access": "true",
+        "warehouse": "s3://warehouse/iceberg"
+    }
+)
+
+# Create cdc namespace for test tables
+try:
+    catalog.create_namespace("cdc")
+    print("✓ Created namespace: cdc")
+except Exception as e:
+    print(f"Note: cdc namespace may already exist ({e})")
 
 # Create customers Iceberg table
 customers_schema = Schema(
@@ -37,9 +50,19 @@ try:
         "demo.customers",
         schema=customers_schema
     )
-    print("✓ Created Iceberg table: customers")
+    print("✓ Created Iceberg table: demo.customers")
 except Exception as e:
-    print(f"Note: customers table may already exist ({e})")
+    print(f"Note: demo.customers table may already exist ({e})")
+
+# Create customers table in cdc namespace (for tests)
+try:
+    catalog.create_table(
+        "cdc.customers",
+        schema=customers_schema
+    )
+    print("✓ Created Iceberg table: cdc.customers")
+except Exception as e:
+    print(f"Note: cdc.customers table may already exist ({e})")
 
 # Create products Iceberg table
 products_schema = Schema(

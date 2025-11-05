@@ -32,7 +32,7 @@ curl -i -X POST \
       "value.converter": "org.apache.kafka.connect.json.JsonConverter",
       "key.converter.schemas.enable": "false",
       "value.converter.schemas.enable": "false",
-      "topic.prefix": "cdc.mysql",
+      "topic.prefix": "debezium",
       "transforms": "unwrap",
       "transforms.unwrap.type": "io.debezium.transforms.ExtractNewRecordState",
       "transforms.unwrap.drop.tombstones": "false",

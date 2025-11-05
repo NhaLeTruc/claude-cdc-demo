@@ -56,6 +56,28 @@ orders_df.write \
 
 print("✓ Created Delta table: orders (with CDF enabled)")
 
+# Create products Delta table for MySQL CDC (used by e2e tests)
+products_schema = StructType([
+    StructField("product_id", IntegerType(), False),
+    StructField("product_name", StringType(), True),
+    StructField("description", StringType(), True),
+    StructField("category", StringType(), True),
+    StructField("price", DecimalType(10, 2), True),
+    StructField("stock_quantity", IntegerType(), True),
+    StructField("metadata", StringType(), True),
+    StructField("created_at", TimestampType(), True),
+    StructField("updated_at", TimestampType(), True),
+])
+
+products_df = spark.createDataFrame([], products_schema)
+products_df.write \
+    .format("delta") \
+    .mode("overwrite") \
+    .option("delta.enableChangeDataFeed", "true") \
+    .save("/tmp/delta/e2e_test/mysql_products")
+
+print("✓ Created Delta table: mysql_products (with CDF enabled)")
+
 spark.stop()
 print("\nDeltaLake tables initialized successfully!")
 EOF
