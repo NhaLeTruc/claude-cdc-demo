@@ -5,7 +5,7 @@
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-PROJECT_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
+PROJECT_ROOT="$(cd "${SCRIPT_DIR}/../.." && pwd)"
 
 # Load environment variables
 if [ -f "${PROJECT_ROOT}/.env" ]; then
@@ -72,7 +72,7 @@ check_prerequisites() {
     # Check Debezium connector
     if ! curl -s http://localhost:8083/connectors/postgres-cdc-connector/status | grep -q '"state":"RUNNING"'; then
         log_warn "Debezium connector is not running. Setting it up..."
-        cd "${PROJECT_ROOT}" && poetry run python scripts/setup_debezium_connector.py
+        cd "${PROJECT_ROOT}" && poetry run python scripts/connectors/setup_postgres_connector.py
     else
         log_info "Debezium connector is running"
     fi
@@ -98,7 +98,7 @@ start_delta_pipeline() {
     fi
 
     cd "${PROJECT_ROOT}"
-    nohup poetry run python scripts/kafka_to_delta_streaming.py \
+    nohup poetry run python -m src.cdc_pipelines.streaming.kafka_to_delta \
         "${KAFKA_BOOTSTRAP_SERVERS}" \
         "${KAFKA_TOPIC}" \
         "${DELTA_TABLE_PATH}" \
@@ -127,7 +127,7 @@ start_iceberg_pipeline() {
     fi
 
     cd "${PROJECT_ROOT}"
-    nohup poetry run python scripts/kafka_to_iceberg_streaming.py \
+    nohup poetry run python -m src.cdc_pipelines.streaming.kafka_to_iceberg \
         "${KAFKA_BOOTSTRAP_SERVERS}" \
         "${KAFKA_TOPIC}" \
         "${ICEBERG_WAREHOUSE}" \

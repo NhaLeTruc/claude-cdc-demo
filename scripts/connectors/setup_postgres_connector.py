@@ -66,7 +66,7 @@ def create_postgres_connector(
     database_user: str = None,
     database_password: str = None,
     database_dbname: str = None,
-    topic_prefix: str = "postgres",
+    topic_prefix: str = "debezium",
 ) -> bool:
     """Create Debezium PostgreSQL connector."""
 
@@ -96,7 +96,7 @@ def create_postgres_connector(
             "topic.prefix": topic_prefix,
             "plugin.name": "pgoutput",
             "publication.autocreate.mode": "filtered",
-            "table.include.list": "public.customers,public.orders,public.products,public.inventory",
+            "table.include.list": "public.customers,public.orders,public.products,public.inventory,public.schema_evolution_test",
             "slot.name": f"{topic_prefix}_debezium_slot",
             "slot.drop.on.stop": "false",
             "heartbeat.interval.ms": "10000",
