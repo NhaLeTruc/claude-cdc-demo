@@ -96,7 +96,7 @@ class TestDeltaCDFWorkflow:
     def test_cdf_streaming_workflow(self, spark):
         """Test CDF streaming consumption pattern."""
         from src.cdc_pipelines.deltalake.table_manager import DeltaTableManager
-        from src.cdc_pipelines.deltalake.pipeline import DeltaCDFPipeline
+        from src.cdc_pipelines.deltalake.pipeline import DeltaCDFPipeline, PipelineConfig
 
         # Initialize table
         manager = DeltaTableManager(
@@ -111,9 +111,8 @@ class TestDeltaCDFWorkflow:
         ).save("/tmp/e2e_cdf_streaming")
 
         # Start CDF pipeline
-        pipeline = DeltaCDFPipeline(
-            table_path="/tmp/e2e_cdf_streaming", poll_interval_seconds=5
-        )
+        config = PipelineConfig(table_path="/tmp/e2e_cdf_streaming")
+        pipeline = DeltaCDFPipeline(config=config, spark=spark)
 
         # Write more data
         new_data = [{"id": 2, "value": "B"}]
@@ -146,15 +145,18 @@ class TestDeltaCDFWorkflow:
         changes = cdf_reader.read_changes(start_version=0, end_version=1)
 
         # Apply changes to downstream table
+        changes_written = False
         for change in changes:
-            if change["_change_type"] == "update_postimage":
+            if change["_change_type"] in ["update_postimage", "insert"]:
                 # Write to downstream
                 downstream_df = spark.createDataFrame([change])
                 downstream_df.write.format("delta").mode("append").save(
                     "/tmp/e2e_downstream"
                 )
+                changes_written = True
 
         # Verify downstream has update
+        assert changes_written, "No changes were written to downstream"
         downstream_data = (
             spark.read.format("delta").load("/tmp/e2e_downstream").collect()
         )
@@ -195,8 +197,14 @@ class TestDeltaCDFWorkflow:
 
     def test_cdf_data_quality_monitoring(self, spark):
         """Test data quality monitoring using CDF."""
+        import shutil
         from src.cdc_pipelines.deltalake.cdf_reader import CDFReader
         from src.validation.integrity import RowCountValidator
+
+        # Clean up any existing data
+        test_path = "/tmp/e2e_quality_monitoring"
+        if shutil.os.path.exists(test_path):
+            shutil.rmtree(test_path)
 
         # Write data with potential quality issues
         data = [
@@ -204,17 +212,20 @@ class TestDeltaCDFWorkflow:
             {"id": 2, "value": "Bad", "quality_score": 50},
         ]
         df = spark.createDataFrame(data)
-        df.write.format("delta").mode("append").option(
+        df.write.format("delta").mode("overwrite").option(
             "delta.enableChangeDataFeed", "true"
-        ).save("/tmp/e2e_quality")
+        ).save(test_path)
 
-        # Read CDF
-        cdf_reader = CDFReader(table_path="/tmp/e2e_quality")
-        changes = cdf_reader.read_changes(start_version=0, end_version=1)
+        # Read CDF - version 0 contains the initial write
+        cdf_reader = CDFReader(table_path=test_path)
+        changes = cdf_reader.read_changes(start_version=0, end_version=0)
 
-        # Validate data quality
+        # Filter changes to get only insert operations (the actual data rows)
+        insert_changes = [c for c in changes if c.get("_change_type") == "insert"]
+
+        # Validate data quality - compare source data with inserted rows
         validator = RowCountValidator(tolerance=0)
-        result = validator.validate(data, changes)
+        result = validator.validate(data, insert_changes)
 
         assert result.status.value == "passed"
 

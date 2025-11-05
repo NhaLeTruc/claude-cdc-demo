@@ -149,6 +149,34 @@ class DeltaCDCPipeline:
 
         return changes_df
 
+    def get_new_changes(self) -> List[Dict[str, Any]]:
+        """
+        Get new changes since last processed version as a list of dictionaries.
+
+        Returns:
+            List of change records as dictionaries
+        """
+        # Start from version 0 if never processed
+        if self.last_processed_version is None:
+            self.last_processed_version = -1
+
+        start_version = self.last_processed_version + 1
+        latest_version = self.table_manager.get_latest_version()
+
+        if start_version > latest_version:
+            return []
+
+        changes_df = self.cdf_reader.read_changes_between_versions(
+            start_version=start_version,
+            end_version=latest_version,
+        )
+
+        # Update last processed version
+        self.last_processed_version = latest_version
+
+        # Convert to list of dictionaries
+        return [row.asDict() for row in changes_df.collect()]
+
     def get_changes_since_timestamp(
         self,
         since: datetime,

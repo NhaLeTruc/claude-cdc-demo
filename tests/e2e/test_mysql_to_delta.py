@@ -31,11 +31,11 @@ def mysql_connection():
 
     settings = get_settings()
     manager = MySQLConnectionManager(
-        host=settings.mysql_host,
-        port=settings.mysql_port,
-        user=settings.mysql_user,
-        password=settings.mysql_password,
-        database=settings.mysql_database,
+        host=settings.mysql.host,
+        port=settings.mysql.port,
+        user=settings.mysql.user,
+        password=settings.mysql.password,
+        database=settings.mysql.db,
     )
     yield manager
     manager.close()
@@ -60,7 +60,6 @@ def cdc_pipeline():
 
 
 @pytest.mark.e2e
-@pytest.mark.skip(reason="Requires full infrastructure: MySQL, Debezium, Kafka, Spark")
 class TestMySQLToDeltaE2E:
     """End-to-end tests for complete MySQL to DeltaLake pipeline."""
 
