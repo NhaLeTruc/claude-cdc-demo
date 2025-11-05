@@ -1,0 +1,24 @@
+services:
+  schema-registry:
+    image: confluentinc/cp-schema-registry:7.5.0
+    container_name: cdc-schema-registry
+    depends_on:
+      kafka:
+        condition: service_healthy
+    environment:
+      SCHEMA_REGISTRY_HOST_NAME: schema-registry
+      SCHEMA_REGISTRY_KAFKASTORE_BOOTSTRAP_SERVERS: kafka:9092
+      SCHEMA_REGISTRY_LISTENERS: http://0.0.0.0:${SCHEMA_REGISTRY_PORT:-8081}
+      SCHEMA_REGISTRY_KAFKASTORE_TOPIC: _schemas
+      SCHEMA_REGISTRY_DEBUG: "false"
+      SCHEMA_REGISTRY_SCHEMA_COMPATIBILITY_LEVEL: ${SCHEMA_REGISTRY_COMPATIBILITY:-BACKWARD}
+    ports:
+      - "${SCHEMA_REGISTRY_PORT:-8081}:8081"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8081/subjects"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+    networks:
+      - cdc-network

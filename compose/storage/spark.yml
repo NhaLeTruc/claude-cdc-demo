@@ -1,0 +1,29 @@
+services:
+  spark:
+    image: apache/spark:3.5.0
+    container_name: cdc-spark
+    environment:
+      - SPARK_MASTER_HOST=spark
+      - SPARK_MASTER_PORT=${SPARK_MASTER_PORT:-7077}
+      - SPARK_DRIVER_MEMORY=${SPARK_DRIVER_MEMORY:-1g}
+      - SPARK_EXECUTOR_MEMORY=${SPARK_EXECUTOR_MEMORY:-1g}
+    ports:
+      - "${SPARK_MASTER_PORT:-7077}:7077"
+      - "${SPARK_UI_PORT:-8080}:8080"
+      - "${SPARK_DRIVER_PORT:-4040}:4040"
+    volumes:
+      - ../../data/delta-tables:/opt/delta-tables
+      - ../../docker/spark:/opt/spark/conf:ro
+    command: /opt/spark/bin/spark-class org.apache.spark.deploy.master.Master
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    deploy:
+      resources:
+        limits:
+          memory: ${SPARK_MEMORY_LIMIT:-2g}
+          cpus: '${SPARK_CPU_LIMIT:-1.0}'
+    networks:
+      - cdc-network
