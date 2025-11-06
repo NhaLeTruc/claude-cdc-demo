@@ -96,17 +96,24 @@ class TestCrossStorageCDC:
         time.sleep(5)
 
         # Step 3: Verify event in Kafka
+        from tests.test_utils import get_kafka_topic, safe_json_deserializer
+
         consumer = KafkaConsumer(
-            "debezium.public.customers",
-            bootstrap_servers="localhost:29092",
+            get_kafka_topic("customers"),
+            bootstrap_servers=os.getenv("KAFKA_BOOTSTRAP_SERVERS", "localhost:29092"),
             auto_offset_reset="earliest",
             consumer_timeout_ms=10000,
+            value_deserializer=safe_json_deserializer
         )
 
         event_found = False
         for message in consumer:
             payload = message.value
-            if payload.get("payload", {}).get("after", {}).get("customer_id") == customer_id:
+            # Skip tombstone records (None values from DELETE operations)
+            if payload is None:
+                continue
+            # Connector uses ExtractNewRecordState transform, so payload is already unwrapped
+            if payload.get("customer_id") == customer_id:
                 event_found = True
                 break
 
