@@ -25,19 +25,29 @@ services:
     working_dir: /app
     environment:
       - PYTHONPATH=/app
-      - KAFKA_BOOTSTRAP_SERVERS=kafka:9092
-      - DEBEZIUM_HOST=debezium
-      - DEBEZIUM_PORT=8083
-      - POSTGRES_HOST=postgres
-      - POSTGRES_PORT=5432
-      - POSTGRES_USER=cdcuser
-      - POSTGRES_PASSWORD=cdcpass
-      - POSTGRES_DB=cdcdb
-      - MYSQL_HOST=mysql
-      - MYSQL_PORT=3306
-      - MYSQL_USER=cdcuser
-      - MYSQL_PASSWORD=cdcpass
-      - MYSQL_DB=cdcdb
+      - KAFKA_BOOTSTRAP_SERVERS=${KAFKA_BOOTSTRAP_SERVERS_INTERNAL:-kafka:9092}
+      - KAFKA_TOPIC=${KAFKA_TOPIC:-debezium.public.customers}
+      - KAFKA_TOPIC_CUSTOMERS=${KAFKA_TOPIC_CUSTOMERS:-debezium.public.customers}
+      - KAFKA_TOPIC_ORDERS=${KAFKA_TOPIC_ORDERS:-debezium.public.orders}
+      - KAFKA_TOPIC_PRODUCTS=${KAFKA_TOPIC_PRODUCTS:-debezium.public.products}
+      - DEBEZIUM_HOST=${DEBEZIUM_HOST_INTERNAL:-debezium}
+      - DEBEZIUM_PORT=${DEBEZIUM_PORT:-8083}
+      - DEBEZIUM_URL=http://${DEBEZIUM_HOST_INTERNAL:-debezium}:${DEBEZIUM_PORT:-8083}
+      - POSTGRES_HOST=${POSTGRES_HOST_INTERNAL:-postgres}
+      - POSTGRES_PORT=${POSTGRES_PORT:-5432}
+      - POSTGRES_USER=${POSTGRES_USER:-cdcuser}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-cdcpass}
+      - POSTGRES_DB=${POSTGRES_DB:-cdcdb}
+      - MYSQL_HOST=${MYSQL_HOST_INTERNAL:-mysql}
+      - MYSQL_PORT=${MYSQL_PORT:-3306}
+      - MYSQL_USER=${MYSQL_USER:-cdcuser}
+      - MYSQL_PASSWORD=${MYSQL_PASSWORD:-cdcpass}
+      - MYSQL_DB=${MYSQL_DB:-cdcdb}
+      - DELTA_TABLE_PATH=/tmp/delta/customers
+      - ICEBERG_WAREHOUSE=/tmp/iceberg_warehouse
+      - ICEBERG_CATALOG=iceberg
+      - ICEBERG_NAMESPACE=analytics
+      - ICEBERG_TABLE=customers_analytics
     command: bash scripts/infrastructure/init-all.sh
     restart: unless-stopped
     networks:
