@@ -7,14 +7,15 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(cd "${SCRIPT_DIR}/../.." && pwd)"
 
-# Load environment variables
-if [ -f "${PROJECT_ROOT}/.env" ]; then
+# Load environment variables (skip if running in Docker container)
+# Docker containers should use environment variables from docker-compose
+if [ -f "${PROJECT_ROOT}/.env" ] && [ ! -f "/.dockerenv" ]; then
     source "${PROJECT_ROOT}/.env"
 fi
 
 # Default configuration
 KAFKA_BOOTSTRAP_SERVERS="${KAFKA_BOOTSTRAP_SERVERS:-localhost:9092}"
-KAFKA_TOPIC="${KAFKA_TOPIC:-postgres.public.customers}"
+KAFKA_TOPIC="${KAFKA_TOPIC:-debezium.public.customers}"
 DELTA_TABLE_PATH="${DELTA_TABLE_PATH:-/tmp/delta-cdc/customers}"
 DELTA_CHECKPOINT="${DELTA_CHECKPOINT:-/tmp/spark-checkpoints/kafka-to-delta}"
 ICEBERG_WAREHOUSE="${ICEBERG_WAREHOUSE:-/tmp/iceberg-warehouse}"
@@ -63,18 +64,30 @@ check_service() {
 check_prerequisites() {
     log_info "Checking prerequisites..."
 
-    # Check Kafka
-    if ! check_service "Kafka" "localhost" "9092"; then
-        log_error "Kafka is not running. Please start Docker services first."
-        exit 1
+    # Parse Kafka bootstrap servers to get host and port
+    # Format: host:port or host1:port1,host2:port2
+    KAFKA_HOST=$(echo "$KAFKA_BOOTSTRAP_SERVERS" | cut -d',' -f1 | cut -d':' -f1)
+    KAFKA_PORT=$(echo "$KAFKA_BOOTSTRAP_SERVERS" | cut -d',' -f1 | cut -d':' -f2)
+
+    # Default to standard port if parsing fails
+    KAFKA_PORT=${KAFKA_PORT:-9092}
+
+    # Check Kafka (non-fatal, just a warning)
+    if check_service "Kafka" "$KAFKA_HOST" "$KAFKA_PORT"; then
+        log_info "Kafka is available and ready"
+    else
+        log_warn "Kafka check failed at ${KAFKA_HOST}:${KAFKA_PORT}. Streaming jobs will retry on connection."
     fi
 
-    # Check Debezium connector
-    if ! curl -s http://localhost:8083/connectors/postgres-cdc-connector/status | grep -q '"state":"RUNNING"'; then
-        log_warn "Debezium connector is not running. Setting it up..."
-        cd "${PROJECT_ROOT}" && poetry run python scripts/connectors/setup_postgres_connector.py
-    else
+    # Determine Debezium URL based on environment
+    DEBEZIUM_URL="${DEBEZIUM_URL:-http://localhost:8083}"
+
+    # Check Debezium connector (non-fatal warning)
+    if curl -s "${DEBEZIUM_URL}/connectors/postgres-cdc-connector/status" 2>/dev/null | grep -q '"state":"RUNNING"'; then
         log_info "Debezium connector is running"
+    else
+        log_warn "Debezium connector is not running or not reachable at ${DEBEZIUM_URL}"
+        log_warn "Streaming jobs may fail until connector is registered"
     fi
 
     # Create checkpoint directories
@@ -98,10 +111,23 @@ start_delta_pipeline() {
     fi
 
     cd "${PROJECT_ROOT}"
-    nohup poetry run python -m src.cdc_pipelines.streaming.kafka_to_delta \
-        "${KAFKA_BOOTSTRAP_SERVERS}" \
-        "${KAFKA_TOPIC}" \
-        "${DELTA_TABLE_PATH}" \
+
+    # Determine Python command (prefer poetry if available)
+    if command -v poetry &> /dev/null; then
+        PYTHON_CMD="poetry run python"
+    else
+        PYTHON_CMD="python3"
+    fi
+
+    # Export environment variables for the streaming job
+    export KAFKA_BOOTSTRAP_SERVERS="${KAFKA_BOOTSTRAP_SERVERS}"
+    export KAFKA_TOPIC="${KAFKA_TOPIC}"
+    export DELTA_TABLE_PATH="${DELTA_TABLE_PATH}"
+    export CHECKPOINT_LOCATION="${DELTA_CHECKPOINT}"
+
+    # Don't pass command-line arguments - let the script use environment variables
+    # This prevents issues with .env file values overriding docker-compose env vars
+    nohup $PYTHON_CMD -m src.cdc_pipelines.streaming.kafka_to_delta \
         > "${DELTA_LOG_FILE}" 2>&1 &
 
     local pid=$!
@@ -127,10 +153,26 @@ start_iceberg_pipeline() {
     fi
 
     cd "${PROJECT_ROOT}"
-    nohup poetry run python -m src.cdc_pipelines.streaming.kafka_to_iceberg \
-        "${KAFKA_BOOTSTRAP_SERVERS}" \
-        "${KAFKA_TOPIC}" \
-        "${ICEBERG_WAREHOUSE}" \
+
+    # Determine Python command (prefer poetry if available)
+    if command -v poetry &> /dev/null; then
+        PYTHON_CMD="poetry run python"
+    else
+        PYTHON_CMD="python3"
+    fi
+
+    # Export environment variables for the streaming job
+    export KAFKA_BOOTSTRAP_SERVERS="${KAFKA_BOOTSTRAP_SERVERS}"
+    export KAFKA_TOPIC="${KAFKA_TOPIC}"
+    export ICEBERG_WAREHOUSE="${ICEBERG_WAREHOUSE}"
+    export ICEBERG_CATALOG="${ICEBERG_CATALOG:-iceberg}"
+    export ICEBERG_NAMESPACE="${ICEBERG_NAMESPACE:-analytics}"
+    export ICEBERG_TABLE="${ICEBERG_TABLE:-customers_analytics}"
+    export CHECKPOINT_LOCATION="${ICEBERG_CHECKPOINT}"
+
+    # Don't pass command-line arguments - let the script use environment variables
+    # This prevents issues with .env file values overriding docker-compose env vars
+    nohup $PYTHON_CMD -m src.cdc_pipelines.streaming.kafka_to_iceberg \
         > "${ICEBERG_LOG_FILE}" 2>&1 &
 
     local pid=$!

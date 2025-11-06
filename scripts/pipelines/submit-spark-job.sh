@@ -13,7 +13,7 @@
 #   ./submit-spark-job.sh
 #
 #   # Custom configuration
-#   ./submit-spark-job.sh localhost:9092 postgres.public.customers /data/iceberg
+#   ./submit-spark-job.sh localhost:9092 debezium.public.customers /data/iceberg
 #
 ###############################################################################
 
@@ -32,7 +32,7 @@ PROJECT_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 
 # Default configuration
 KAFKA_BOOTSTRAP_SERVERS="${1:-localhost:9092}"
-KAFKA_TOPIC="${2:-postgres.public.customers}"
+KAFKA_TOPIC="${2:-debezium.public.customers}"
 ICEBERG_CATALOG="${3:-iceberg}"
 ICEBERG_WAREHOUSE="${4:-/data/iceberg/warehouse}"
 ICEBERG_NAMESPACE="${5:-analytics}"
@@ -273,7 +273,7 @@ USAGE:
 
 ARGUMENTS:
     kafka_servers    Kafka bootstrap servers (default: localhost:9092)
-    kafka_topic      Kafka topic to consume (default: postgres.public.customers)
+    kafka_topic      Kafka topic to consume (default: debezium.public.customers)
     warehouse_path   Iceberg warehouse path (default: /data/iceberg/warehouse)
 
 ENVIRONMENT VARIABLES:
