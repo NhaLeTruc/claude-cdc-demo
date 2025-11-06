@@ -408,7 +408,7 @@ def main():
     """
     # Configuration from environment or defaults
     kafka_bootstrap_servers = os.getenv("KAFKA_BOOTSTRAP_SERVERS", "localhost:9092")
-    kafka_topic = os.getenv("KAFKA_TOPIC", "postgres.public.customers")
+    kafka_topic = os.getenv("KAFKA_TOPIC", "debezium.public.customers")
     iceberg_catalog = os.getenv("ICEBERG_CATALOG", "iceberg")
     iceberg_warehouse = os.getenv("ICEBERG_WAREHOUSE", "/tmp/iceberg-warehouse")
     iceberg_namespace = os.getenv("ICEBERG_NAMESPACE", "analytics")
