@@ -343,7 +343,7 @@ def main():
     """
     # Configuration from environment or defaults
     kafka_bootstrap_servers = os.getenv("KAFKA_BOOTSTRAP_SERVERS", "localhost:9092")
-    kafka_topic = os.getenv("KAFKA_TOPIC", "postgres.public.customers")
+    kafka_topic = os.getenv("KAFKA_TOPIC", "debezium.public.customers")
     delta_table_path = os.getenv("DELTA_TABLE_PATH", "/tmp/delta-cdc/customers")
     checkpoint_location = os.getenv("CHECKPOINT_LOCATION", "/tmp/spark-checkpoints/kafka-to-delta")
 

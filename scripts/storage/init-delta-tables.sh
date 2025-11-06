@@ -5,20 +5,47 @@ set -e
 
 echo "Initializing DeltaLake tables with CDF enabled..."
 
-# This script would typically use PySpark to create Delta tables
-# For now, we'll create a placeholder that can be executed via Python
+# This script uses PySpark to create Delta tables
+# Run through poetry to ensure proper environment and dependencies
 
-python3 <<EOF
+# Determine Python command (prefer poetry if available)
+if command -v poetry &> /dev/null; then
+    PYTHON_CMD="poetry run python"
+else
+    PYTHON_CMD="python3"
+fi
+
+$PYTHON_CMD <<EOF
 from pyspark.sql import SparkSession
 from pyspark.sql.types import StructType, StructField, StringType, IntegerType, DecimalType, TimestampType
 
+try:
+    from delta import configure_spark_with_delta_pip
+    DELTA_AVAILABLE = True
+except ImportError:
+    DELTA_AVAILABLE = False
+    print("Warning: delta-spark not available, attempting manual configuration")
+
 # Initialize Spark with Delta Lake support
-spark = SparkSession.builder \
+builder = SparkSession.builder \
     .appName("DeltaLake CDC Init") \
     .config("spark.sql.extensions", "io.delta.sql.DeltaSparkSessionExtension") \
     .config("spark.sql.catalog.spark_catalog", "org.apache.spark.sql.delta.catalog.DeltaCatalog") \
     .config("spark.databricks.delta.properties.defaults.enableChangeDataFeed", "true") \
-    .getOrCreate()
+    .master("local[*]")
+
+# Use configure_spark_with_delta_pip if available (adds Delta packages automatically)
+if DELTA_AVAILABLE:
+    builder = configure_spark_with_delta_pip(builder)
+    # Add Kafka package for streaming (same versions as in streaming scripts)
+    builder = builder.config("spark.jars.packages",
+                            "io.delta:delta-spark_2.12:3.3.2,org.apache.spark:spark-sql-kafka-0-10_2.12:3.4.0")
+else:
+    # Manual configuration
+    builder = builder.config("spark.jars.packages",
+                            "io.delta:delta-core_2.12:2.4.0,io.delta:delta-storage:2.4.0")
+
+spark = builder.getOrCreate()
 
 # Create customers Delta table
 customers_schema = StructType([
@@ -34,7 +61,7 @@ customers_df.write \
     .format("delta") \
     .mode("overwrite") \
     .option("delta.enableChangeDataFeed", "true") \
-    .save("./delta-lake/customers")
+    .save("/tmp/delta/customers")
 
 print("✓ Created Delta table: customers (with CDF enabled)")
 
@@ -52,7 +79,7 @@ orders_df.write \
     .format("delta") \
     .mode("overwrite") \
     .option("delta.enableChangeDataFeed", "true") \
-    .save("./delta-lake/orders")
+    .save("/tmp/delta/orders")
 
 print("✓ Created Delta table: orders (with CDF enabled)")
 
