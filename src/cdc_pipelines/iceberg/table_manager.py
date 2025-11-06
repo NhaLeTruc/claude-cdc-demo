@@ -832,3 +832,137 @@ class IcebergTableManager:
         except Exception as e:
             logger.error(f"Failed to upsert data: {e}")
             raise
+
+    def query_table(
+        self,
+        filter_condition: Optional[str] = None,
+        limit: Optional[int] = None
+    ) -> List[Dict[str, Any]]:
+        """
+        Query data from the Iceberg table.
+
+        Args:
+            filter_condition: Optional SQL-like filter condition (e.g., "customer_id > 100")
+            limit: Optional maximum number of records to return
+
+        Returns:
+            List of records as dictionaries
+        """
+        if not self.table_exists():
+            logger.warning("Table does not exist, returning empty list")
+            return []
+
+        table = self.load_table()
+
+        try:
+            # Scan the table
+            scan = table.scan()
+
+            # Apply filter if provided
+            if filter_condition:
+                scan = scan.filter(filter_condition)
+
+            # Apply limit if provided
+            if limit:
+                scan = scan.limit(limit)
+
+            # Convert to PyArrow table and then to list of dicts
+            arrow_table = scan.to_arrow()
+            records = arrow_table.to_pylist()
+
+            logger.info(f"Queried {len(records)} records from {self.config.namespace}.{self.config.table_name}")
+            return records
+        except Exception as e:
+            logger.error(f"Failed to query table: {e}")
+            raise
+
+    def count_records(self, filter_condition: Optional[str] = None) -> int:
+        """
+        Count records in the Iceberg table.
+
+        Args:
+            filter_condition: Optional SQL-like filter condition (e.g., "customer_id > 100")
+
+        Returns:
+            Number of records matching the filter
+        """
+        if not self.table_exists():
+            return 0
+
+        table = self.load_table()
+
+        try:
+            # Scan the table
+            scan = table.scan()
+
+            # Apply filter if provided
+            if filter_condition:
+                scan = scan.filter(filter_condition)
+
+            # Convert to PyArrow and count rows
+            arrow_table = scan.to_arrow()
+            count = arrow_table.num_rows
+
+            logger.info(f"Counted {count} records in {self.config.namespace}.{self.config.table_name}")
+            return count
+        except Exception as e:
+            logger.error(f"Failed to count records: {e}")
+            raise
+
+    def _matches_filter(self, row: Dict[str, Any], filter_condition: str) -> bool:
+        """
+        Check if a row matches a simple filter condition.
+
+        This is a simplified filter matcher for basic conditions.
+        In production, use Iceberg's native filtering.
+
+        Args:
+            row: Record as dictionary
+            filter_condition: Simple filter like "customer_id > 100"
+
+        Returns:
+            True if row matches the filter
+        """
+        # This is a very basic implementation for common patterns
+        # For production use, rely on Iceberg's native filter support
+        import re
+
+        # Parse simple conditions like "field > value" or "field = value"
+        match = re.match(r'(\w+)\s*([><=]+)\s*(.+)', filter_condition.strip())
+        if not match:
+            logger.warning(f"Cannot parse filter: {filter_condition}")
+            return True  # Default to including the row
+
+        field, operator, value = match.groups()
+        value = value.strip().strip("'\"")
+
+        # Get field value from row
+        if field not in row:
+            return False
+
+        row_value = row[field]
+
+        # Convert value to appropriate type
+        try:
+            if isinstance(row_value, int):
+                value = int(value)
+            elif isinstance(row_value, float):
+                value = float(value)
+        except ValueError:
+            pass
+
+        # Apply operator
+        if operator == '>':
+            return row_value > value
+        elif operator == '>=':
+            return row_value >= value
+        elif operator == '<':
+            return row_value < value
+        elif operator == '<=':
+            return row_value <= value
+        elif operator == '=' or operator == '==':
+            return row_value == value
+        elif operator == '!=':
+            return row_value != value
+
+        return True
