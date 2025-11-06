@@ -192,10 +192,19 @@ class TestDeltaLakeWriter:
         # Should perform merge operation
         assert mock_get_spark.called
 
-    @patch("pyspark.sql.SparkSession")
-    def test_handle_delete_operation(self, mock_spark):
+    @patch("src.cdc_pipelines.postgres.delta_writer.DeltaLakeWriter._get_spark")
+    @patch("delta.tables.DeltaTable")
+    def test_handle_delete_operation(self, mock_delta_table, mock_get_spark):
         """Test handling DELETE operation."""
         from src.cdc_pipelines.postgres.delta_writer import DeltaLakeWriter
+
+        # Setup mocked Spark session
+        mock_spark = MagicMock()
+        mock_get_spark.return_value = mock_spark
+
+        # Mock DeltaTable
+        mock_table = MagicMock()
+        mock_delta_table.forPath.return_value = mock_table
 
         event = {
             "operation": "DELETE",
@@ -208,7 +217,7 @@ class TestDeltaLakeWriter:
         writer.write(event)
 
         # Should perform delete operation
-        assert True  # Delete logic would be tested in integration tests
+        mock_table.delete.assert_called_once_with("id = 1")
 
     @patch("src.cdc_pipelines.postgres.delta_writer.DeltaLakeWriter._get_spark")
     def test_writer_with_partitioning(self, mock_get_spark):
