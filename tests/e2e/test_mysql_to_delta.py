@@ -3,6 +3,7 @@
 import pytest
 import time
 from pyspark.sql import SparkSession
+from tests.test_utils import ensure_delta_table_exists, read_delta_table_with_retry
 
 
 @pytest.fixture(scope="module")
@@ -95,7 +96,8 @@ class TestMySQLToDeltaE2E:
         time.sleep(10)
 
         # Verify in DeltaLake
-        delta_df = spark.read.format("delta").load("/tmp/delta/e2e_test/mysql_products")
+        ensure_delta_table_exists(spark, "/tmp/delta/e2e_test/mysql_products", timeout_seconds=60)
+        delta_df = read_delta_table_with_retry(spark, "/tmp/delta/e2e_test/mysql_products")
         result = delta_df.filter("product_id = 9000").collect()
 
         assert len(result) == 1
@@ -131,7 +133,8 @@ class TestMySQLToDeltaE2E:
         time.sleep(10)
 
         # Verify in DeltaLake
-        delta_df = spark.read.format("delta").load("/tmp/delta/e2e_test/mysql_products")
+        ensure_delta_table_exists(spark, "/tmp/delta/e2e_test/mysql_products", timeout_seconds=60)
+        delta_df = read_delta_table_with_retry(spark, "/tmp/delta/e2e_test/mysql_products")
         result = delta_df.filter("product_id = 9001").collect()
 
         assert len(result) == 1
@@ -163,7 +166,8 @@ class TestMySQLToDeltaE2E:
         time.sleep(10)
 
         # Verify in DeltaLake (with CDF, delete should be marked)
-        delta_df = spark.read.format("delta").load("/tmp/delta/e2e_test/mysql_products")
+        ensure_delta_table_exists(spark, "/tmp/delta/e2e_test/mysql_products", timeout_seconds=60)
+        delta_df = read_delta_table_with_retry(spark, "/tmp/delta/e2e_test/mysql_products")
         result = delta_df.filter("product_id = 9002").collect()
 
         # Depending on implementation, deleted record might be marked or removed
@@ -195,7 +199,8 @@ class TestMySQLToDeltaE2E:
         time.sleep(30)
 
         # Verify in DeltaLake
-        delta_df = spark.read.format("delta").load("/tmp/delta/e2e_test/mysql_products")
+        ensure_delta_table_exists(spark, "/tmp/delta/e2e_test/mysql_products", timeout_seconds=60)
+        delta_df = read_delta_table_with_retry(spark, "/tmp/delta/e2e_test/mysql_products")
         result_count = delta_df.filter("product_id >= 9100 AND product_id < 9600").count()
 
         assert result_count == 500
@@ -222,7 +227,8 @@ class TestMySQLToDeltaE2E:
         )
         source_count = source_result[0]["count"]
 
-        delta_df = spark.read.format("delta").load("/tmp/delta/e2e_test/mysql_products")
+        ensure_delta_table_exists(spark, "/tmp/delta/e2e_test/mysql_products", timeout_seconds=60)
+        delta_df = read_delta_table_with_retry(spark, "/tmp/delta/e2e_test/mysql_products")
         dest_count = delta_df.filter("product_id = 9700").count()
 
         # Validate counts match
@@ -252,7 +258,8 @@ class TestMySQLToDeltaE2E:
         time.sleep(10)
 
         # Check when data appears in DeltaLake
-        delta_df = spark.read.format("delta").load("/tmp/delta/e2e_test/mysql_products")
+        ensure_delta_table_exists(spark, "/tmp/delta/e2e_test/mysql_products", timeout_seconds=60)
+        delta_df = read_delta_table_with_retry(spark, "/tmp/delta/e2e_test/mysql_products")
         result = delta_df.filter("product_id = 9800").collect()
 
         if len(result) > 0 and "_cdc_timestamp" in result[0].asDict():
@@ -278,7 +285,8 @@ class TestMySQLToDeltaE2E:
         time.sleep(5)
 
         # Verify initial record
-        delta_df = spark.read.format("delta").load("/tmp/delta/e2e_test/mysql_products")
+        ensure_delta_table_exists(spark, "/tmp/delta/e2e_test/mysql_products", timeout_seconds=60)
+        delta_df = read_delta_table_with_retry(spark, "/tmp/delta/e2e_test/mysql_products")
         result = delta_df.filter("product_id = 9900").collect()
 
         assert len(result) == 1
@@ -312,7 +320,8 @@ class TestMySQLToDeltaE2E:
         time.sleep(10)
 
         # Verify both records appear
-        delta_df = spark.read.format("delta").load("/tmp/delta/e2e_test/mysql_products")
+        ensure_delta_table_exists(spark, "/tmp/delta/e2e_test/mysql_products", timeout_seconds=60)
+        delta_df = read_delta_table_with_retry(spark, "/tmp/delta/e2e_test/mysql_products")
         result = delta_df.filter("product_id IN (9950, 9951)").count()
 
         assert result == 2

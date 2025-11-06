@@ -4,6 +4,7 @@ import os
 import pytest
 from datetime import datetime
 import time
+from tests.test_utils import ensure_iceberg_table_exists
 
 
 @pytest.mark.e2e
@@ -109,6 +110,9 @@ class TestPostgresToIcebergE2E:
         )
 
         iceberg_manager = IcebergTableManager(iceberg_config)
+
+        # Wait for Iceberg table to be created by the streaming pipeline
+        ensure_iceberg_table_exists(iceberg_manager, timeout_seconds=90)
 
         iceberg_count = iceberg_manager.count_records(
             filter_condition=f"customer_id IN ({','.join(map(str, customer_ids))})"
@@ -303,6 +307,10 @@ class TestPostgresToIcebergE2E:
             warehouse_path="s3://warehouse/iceberg",
         )
         iceberg_manager = IcebergTableManager(config)
+
+        # Wait for Iceberg table to be created by the streaming pipeline
+        ensure_iceberg_table_exists(iceberg_manager, timeout_seconds=90)
+
         result = iceberg_manager.query_table(
             filter_condition=f"customer_id = {customer_id}"
         )
@@ -366,6 +374,10 @@ class TestPostgresToIcebergE2E:
             warehouse_path="s3://warehouse/iceberg",
         )
         iceberg_manager = IcebergTableManager(config)
+
+        # Wait for Iceberg table to be created by the streaming pipeline
+        ensure_iceberg_table_exists(iceberg_manager, timeout_seconds=90)
+
         # Query in batches to avoid memory issues
         total_found = 0
         batch_size = 1000
