@@ -16,6 +16,7 @@ from kafka import KafkaConsumer
 import json
 import os
 import requests
+from tests.test_utils import get_kafka_topic, safe_json_deserializer
 
 
 def is_schema_registry_available():
@@ -110,13 +111,13 @@ def test_table(postgres_conn):
     """Create and teardown test table."""
     cursor = postgres_conn.cursor()
 
-    # Create test table
+    # Create test table (matches Debezium configuration)
     cursor.execute("""
-        DROP TABLE IF EXISTS schema_evo_test CASCADE
+        DROP TABLE IF EXISTS schema_evolution_test CASCADE
     """)
 
     cursor.execute("""
-        CREATE TABLE schema_evo_test (
+        CREATE TABLE schema_evolution_test (
             id SERIAL PRIMARY KEY,
             name VARCHAR(100) NOT NULL,
             value INTEGER DEFAULT 0,
@@ -129,7 +130,7 @@ def test_table(postgres_conn):
     yield cursor
 
     # Cleanup
-    cursor.execute("DROP TABLE IF EXISTS schema_evo_test CASCADE")
+    cursor.execute("DROP TABLE IF EXISTS schema_evolution_test CASCADE")
     postgres_conn.commit()
     cursor.close()
 
@@ -172,16 +173,19 @@ class TestPostgresSchemaEvolution:
 
         # Verify event in Kafka
         consumer = KafkaConsumer(
-            'debezium.public.schema_evo_test',
-            bootstrap_servers='localhost:29092',
+            get_kafka_topic("schema_evolution_test"),
+            bootstrap_servers=os.getenv("KAFKA_BOOTSTRAP_SERVERS", "localhost:29092"),
             auto_offset_reset='earliest',
             consumer_timeout_ms=5000,
-            value_deserializer=lambda m: json.loads(m.decode('utf-8'))
+            value_deserializer=safe_json_deserializer
         )
 
         initial_event_found = False
         for message in consumer:
             event = message.value
+            # Skip tombstone records (None values from DELETE operations)
+            if event is None:
+                continue
             if event.get('payload', {}).get('after', {}).get('id') == initial_id:
                 # Verify initial schema doesn't have new column
                 assert 'description' not in event['payload']['after']
@@ -192,7 +196,7 @@ class TestPostgresSchemaEvolution:
 
         # Step 3: ADD new column
         test_table.execute("""
-            ALTER TABLE schema_evo_test
+            ALTER TABLE schema_evolution_test
             ADD COLUMN description TEXT DEFAULT 'No description'
         """)
         postgres_conn.commit()
@@ -202,7 +206,7 @@ class TestPostgresSchemaEvolution:
 
         # Step 4: Insert data with new column
         test_table.execute("""
-            INSERT INTO schema_evo_test (name, value, description)
+            INSERT INTO schema_evolution_test (name, value, description)
             VALUES ('Record After Schema Change', 200, 'This has a description')
             RETURNING id
         """)
@@ -213,16 +217,19 @@ class TestPostgresSchemaEvolution:
         time.sleep(3)
 
         consumer = KafkaConsumer(
-            'debezium.public.schema_evo_test',
-            bootstrap_servers='localhost:29092',
+            get_kafka_topic("schema_evo_test"),
+            bootstrap_servers=os.getenv("KAFKA_BOOTSTRAP_SERVERS", "localhost:29092"),
             auto_offset_reset='latest',
             consumer_timeout_ms=5000,
-            value_deserializer=lambda m: json.loads(m.decode('utf-8'))
+            value_deserializer=safe_json_deserializer
         )
 
         new_event_found = False
         for message in consumer:
             event = message.value
+            # Skip tombstone records
+            if event is None:
+                continue
             if event.get('payload', {}).get('after', {}).get('id') == new_id:
                 # Verify new schema includes description
                 assert 'description' in event['payload']['after']
@@ -281,15 +288,18 @@ class TestPostgresSchemaEvolution:
 
         # Verify CDC event doesn't include dropped column
         consumer = KafkaConsumer(
-            'debezium.public.schema_evo_test',
-            bootstrap_servers='localhost:29092',
+            get_kafka_topic("schema_evo_test"),
+            bootstrap_servers=os.getenv("KAFKA_BOOTSTRAP_SERVERS", "localhost:29092"),
             auto_offset_reset='latest',
             consumer_timeout_ms=5000,
-            value_deserializer=lambda m: json.loads(m.decode('utf-8'))
+            value_deserializer=safe_json_deserializer
         )
 
         for message in consumer:
             event = message.value
+            # Skip tombstone records
+            if event is None:
+                continue
             if event.get('payload', {}).get('after', {}).get('id') == after_id:
                 # Verify 'value' column not in event
                 assert 'value' not in event['payload']['after']
@@ -346,15 +356,18 @@ class TestPostgresSchemaEvolution:
 
         # Verify CDC event has correct type
         consumer = KafkaConsumer(
-            'debezium.public.schema_evo_test',
-            bootstrap_servers='localhost:29092',
+            get_kafka_topic("schema_evo_test"),
+            bootstrap_servers=os.getenv("KAFKA_BOOTSTRAP_SERVERS", "localhost:29092"),
             auto_offset_reset='latest',
             consumer_timeout_ms=5000,
-            value_deserializer=lambda m: json.loads(m.decode('utf-8'))
+            value_deserializer=safe_json_deserializer
         )
 
         for message in consumer:
             event = message.value
+            # Skip tombstone records
+            if event is None:
+                continue
             if event.get('payload', {}).get('after', {}).get('id') == new_id:
                 # Verify large value preserved
                 assert event['payload']['after']['value'] == large_value
@@ -408,15 +421,18 @@ class TestPostgresSchemaEvolution:
 
         # Verify CDC event uses new column name
         consumer = KafkaConsumer(
-            'debezium.public.schema_evo_test',
-            bootstrap_servers='localhost:29092',
+            get_kafka_topic("schema_evo_test"),
+            bootstrap_servers=os.getenv("KAFKA_BOOTSTRAP_SERVERS", "localhost:29092"),
             auto_offset_reset='latest',
             consumer_timeout_ms=5000,
-            value_deserializer=lambda m: json.loads(m.decode('utf-8'))
+            value_deserializer=safe_json_deserializer
         )
 
         for message in consumer:
             event = message.value
+            # Skip tombstone records
+            if event is None:
+                continue
             if event.get('payload', {}).get('after', {}).get('id') == new_id:
                 # Verify new column name used
                 assert 'display_name' in event['payload']['after']
@@ -487,15 +503,18 @@ class TestPostgresSchemaEvolution:
 
         # Verify final schema in CDC
         consumer = KafkaConsumer(
-            'debezium.public.schema_evo_test',
-            bootstrap_servers='localhost:29092',
+            get_kafka_topic("schema_evo_test"),
+            bootstrap_servers=os.getenv("KAFKA_BOOTSTRAP_SERVERS", "localhost:29092"),
             auto_offset_reset='latest',
             consumer_timeout_ms=5000,
-            value_deserializer=lambda m: json.loads(m.decode('utf-8'))
+            value_deserializer=safe_json_deserializer
         )
 
         for message in consumer:
             event = message.value
+            # Skip tombstone records
+            if event is None:
+                continue
             if event.get('payload', {}).get('after', {}).get('id') == final_id:
                 after_data = event['payload']['after']
 
