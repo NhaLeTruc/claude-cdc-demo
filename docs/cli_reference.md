@@ -5,7 +5,7 @@ This document provides comprehensive reference for all command-line tools and sc
 ## Table of Contents
 
 - [Makefile Commands](#makefile-commands)
-- [CDC CLI Tool](#cdc-cli-tool)
+- [CDC CLI Tool](#poetry run cdc-demo-tool)
 - [Utility Scripts](#utility-scripts)
 - [Docker Commands](#docker-commands)
 - [Testing Commands](#testing-commands)
@@ -227,7 +227,7 @@ make clean-all
 
 ## CDC CLI Tool
 
-The `cdc-cli` tool provides commands for managing CDC pipelines.
+The `poetry run cdc-demo` tool provides commands for managing CDC pipelines.
 
 ### Installation
 
@@ -239,7 +239,7 @@ poetry install
 poetry shell
 
 # Verify installation
-cdc-cli --version
+poetry run cdc-demo --version
 ```
 
 ### Global Options
@@ -255,100 +255,84 @@ Options:
 
 ### Commands
 
-#### `cdc-cli status`
+#### `poetry run cdc-demo status`
 
-Show status of all CDC pipelines.
+Check status of CDC demo services.
 
 ```bash
-# Show status of all pipelines
-cdc-cli status
-
-# Show status with lag metrics
-cdc-cli status --show-lag
-
-# Show status for specific pipeline
-cdc-cli status --pipeline postgres_customers_cdc
-
-# Output in JSON format
-cdc-cli status --format json
+# Show status of all services
+poetry run cdc-demo status
 ```
 
 **Options:**
-- `--show-lag`: Include CDC lag metrics
-- `--pipeline NAME`: Filter by pipeline name
-- `--format {table|json|yaml}`: Output format (default: table)
+- None - shows Docker Compose service status
 
 **Example Output:**
 ```
-Pipeline                      Status    Lag (s)    Events/sec    Errors
----------------------------  --------  ---------  ------------  --------
-postgres_customers_cdc       RUNNING   2.1        150           0
-mysql_orders_cdc             RUNNING   1.8        200           0
-deltalake_inventory_cdc      RUNNING   4.5        80            0
-iceberg_analytics_cdc        RUNNING   8.2        50            0
+CDC Demo Service Status
+
+Service              Status   Ports
+─────────────────────────────────────────────
+postgres            Up       5432->5432/tcp
+mysql               Up       3306->3306/tcp
+kafka               Up       9092->9092/tcp
+debezium-connect    Up       8083->8083/tcp
+prometheus          Up       9090->9090/tcp
+grafana             Up       3000->3000/tcp
 ```
 
-#### `cdc-cli monitor`
+#### `poetry run cdc-demo monitor`
 
-Monitor CDC pipelines in real-time.
+Open monitoring dashboards in browser.
 
 ```bash
-# Monitor all pipelines
-cdc-cli monitor
+# Open Grafana (default)
+poetry run cdc-demo monitor
 
-# Monitor specific pipeline
-cdc-cli monitor --pipeline postgres_customers_cdc
+# Open specific dashboards
+poetry run cdc-demo monitor grafana
+poetry run cdc-demo monitor prometheus
+poetry run cdc-demo monitor minio
+poetry run cdc-demo monitor debezium
 
-# Set refresh interval
-cdc-cli monitor --interval 5
-
-# Monitor with alerts
-cdc-cli monitor --alert-on-lag 10
+# Open all dashboards at once
+poetry run cdc-demo monitor all
 ```
 
 **Options:**
-- `--pipeline NAME`: Pipeline to monitor
-- `--interval SECONDS`: Refresh interval (default: 2)
-- `--alert-on-lag SECONDS`: Alert if lag exceeds threshold
-- `--duration SECONDS`: Monitor duration (default: infinite)
+- `TARGET`: Dashboard to open - `grafana`, `prometheus`, `minio`, `debezium`, or `all` (default: grafana)
 
-**Example Output:**
-```
-[2024-01-15 10:30:45] Monitoring: postgres_customers_cdc
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-Lag:           2.3s  ████████████████████░░ (OK)
-Throughput:    145 events/sec
-Errors:        0
-Last Event:    2024-01-15 10:30:43
+**Dashboards:**
+- **Grafana**: http://localhost:3000 (admin/admin)
+- **Prometheus**: http://localhost:9090
+- **MinIO**: http://localhost:9001 (minioadmin/minioadmin)
+- **Debezium**: http://localhost:8083
 
-Press Ctrl+C to stop monitoring
-```
-
-#### `cdc-cli validate`
+#### `poetry run cdc-demo validate`
 
 Run data quality validation checks.
 
 ```bash
-# Validate all pipelines
-cdc-cli validate
-
-# Validate specific pipeline
-cdc-cli validate --pipeline postgres_customers_cdc
+# Run all validations
+poetry run cdc-demo validate
 
 # Run specific validation type
-cdc-cli validate --type row_count
-cdc-cli validate --type checksum
-cdc-cli validate --type schema
+poetry run cdc-demo validate integrity
+poetry run cdc-demo validate lag
+poetry run cdc-demo validate schema
 
-# Set tolerance for row count validation
-cdc-cli validate --type row_count --tolerance 0.01  # 1% tolerance
+# Validate specific pipeline
+poetry run cdc-demo validate --pipeline postgres_customers_cdc
+poetry run cdc-demo validate integrity --pipeline postgres_customers_cdc
+
+# Set lag threshold (in seconds)
+poetry run cdc-demo validate lag --threshold 10
 ```
 
 **Options:**
-- `--pipeline NAME`: Pipeline to validate
-- `--type {row_count|checksum|schema|all}`: Validation type (default: all)
-- `--tolerance FLOAT`: Tolerance for row count mismatch (default: 0.0)
-- `--fix`: Attempt to fix issues (where possible)
+- `TARGET`: Validation type - `integrity`, `lag`, `schema`, or `all` (default: all)
+- `--pipeline, -p TEXT`: Specific pipeline to validate
+- `--threshold, -t INTEGER`: Lag threshold in seconds (for lag validation)
 
 **Example Output:**
 ```
@@ -372,19 +356,19 @@ Validation Results for: postgres_customers_cdc
 Overall: PASSED (3/3 checks)
 ```
 
-#### `cdc-cli start`
+#### `poetry run cdc-demo start`
 
 Start a CDC pipeline.
 
 ```bash
 # Start specific pipeline
-cdc-cli start --pipeline postgres_customers_cdc
+poetry run cdc-demo start --pipeline postgres_customers_cdc
 
 # Start with specific configuration
-cdc-cli start --pipeline postgres_customers_cdc --config custom.yaml
+poetry run cdc-demo start --pipeline postgres_customers_cdc --config custom.yaml
 
 # Start in debug mode
-cdc-cli start --pipeline postgres_customers_cdc --debug
+poetry run cdc-demo start --pipeline postgres_customers_cdc --debug
 ```
 
 **Options:**
@@ -392,19 +376,19 @@ cdc-cli start --pipeline postgres_customers_cdc --debug
 - `--config FILE`: Configuration file
 - `--debug`: Enable debug logging
 
-#### `cdc-cli stop`
+#### `poetry run cdc-demo stop`
 
 Stop a CDC pipeline.
 
 ```bash
 # Stop specific pipeline
-cdc-cli stop --pipeline postgres_customers_cdc
+poetry run cdc-demo stop --pipeline postgres_customers_cdc
 
 # Force stop (kill immediately)
-cdc-cli stop --pipeline postgres_customers_cdc --force
+poetry run cdc-demo stop --pipeline postgres_customers_cdc --force
 
 # Stop all pipelines
-cdc-cli stop --all
+poetry run cdc-demo stop --all
 ```
 
 **Options:**
@@ -412,38 +396,38 @@ cdc-cli stop --all
 - `--all`: Stop all pipelines
 - `--force`: Force stop without graceful shutdown
 
-#### `cdc-cli restart`
+#### `poetry run cdc-demo restart`
 
 Restart a CDC pipeline.
 
 ```bash
 # Restart specific pipeline
-cdc-cli restart --pipeline postgres_customers_cdc
+poetry run cdc-demo restart --pipeline postgres_customers_cdc
 
 # Restart with new configuration
-cdc-cli restart --pipeline postgres_customers_cdc --reload-config
+poetry run cdc-demo restart --pipeline postgres_customers_cdc --reload-config
 ```
 
 **Options:**
 - `--pipeline NAME`: Pipeline to restart (required)
 - `--reload-config`: Reload configuration from file
 
-#### `cdc-cli logs`
+#### `poetry run cdc-demo logs`
 
 View logs for CDC pipelines.
 
 ```bash
 # View logs for specific pipeline
-cdc-cli logs --pipeline postgres_customers_cdc
+poetry run cdc-demo logs --pipeline postgres_customers_cdc
 
 # Tail logs in real-time
-cdc-cli logs --pipeline postgres_customers_cdc --follow
+poetry run cdc-demo logs --pipeline postgres_customers_cdc --follow
 
 # Show last N lines
-cdc-cli logs --pipeline postgres_customers_cdc --tail 100
+poetry run cdc-demo logs --pipeline postgres_customers_cdc --tail 100
 
 # Filter logs by level
-cdc-cli logs --pipeline postgres_customers_cdc --level ERROR
+poetry run cdc-demo logs --pipeline postgres_customers_cdc --level ERROR
 ```
 
 **Options:**
@@ -453,22 +437,22 @@ cdc-cli logs --pipeline postgres_customers_cdc --level ERROR
 - `--level {DEBUG|INFO|WARN|ERROR}`: Filter by log level
 - `--since TIMESTAMP`: Show logs since timestamp
 
-#### `cdc-cli config`
+#### `poetry run cdc-demo config`
 
 Manage pipeline configurations.
 
 ```bash
 # Show current configuration
-cdc-cli config show --pipeline postgres_customers_cdc
+poetry run cdc-demo config show --pipeline postgres_customers_cdc
 
 # Validate configuration
-cdc-cli config validate --file config.yaml
+poetry run cdc-demo config validate --file config.yaml
 
 # Export configuration
-cdc-cli config export --pipeline postgres_customers_cdc --output config.yaml
+poetry run cdc-demo config export --pipeline postgres_customers_cdc --output config.yaml
 
 # Update configuration
-cdc-cli config update --pipeline postgres_customers_cdc --set "batch_size=1000"
+poetry run cdc-demo config update --pipeline postgres_customers_cdc --set "batch_size=1000"
 ```
 
 **Options:**
@@ -816,19 +800,19 @@ export LOG_FORMAT=json
 make quickstart
 
 # View status
-cdc-cli status --show-lag
+poetry run cdc-demo status --show-lag
 
 # Monitor in real-time
-cdc-cli monitor
+poetry run cdc-demo monitor
 
 # Run tests
 make test
 
 # Check data quality
-cdc-cli validate
+poetry run cdc-demo validate
 
 # View logs
-cdc-cli logs --pipeline postgres_customers_cdc --follow
+poetry run cdc-demo logs --pipeline postgres_customers_cdc --follow
 
 # Clean restart
 make clean && make quickstart
@@ -850,7 +834,7 @@ curl http://localhost:8083/connectors/postgres-customers-connector/status
 ./scripts/check-kafka-lag.sh
 
 # Validate data integrity
-cdc-cli validate --type all
+poetry run cdc-demo validate --type all
 ```
 
 ---
