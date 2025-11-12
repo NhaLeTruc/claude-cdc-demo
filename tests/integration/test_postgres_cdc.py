@@ -10,7 +10,7 @@ def is_debezium_connector_running():
     """Check if Debezium connector is running."""
     try:
         response = requests.get(
-            "http://localhost:8083/connectors/postgres-cdc-connector/status",
+            "http://localhost:8083/connectors/postgres-connector/status",
             timeout=2
         )
         if response.status_code == 200:
