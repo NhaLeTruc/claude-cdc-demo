@@ -64,6 +64,9 @@ test-dq: ## Run data quality tests only
 test-coverage: ## Run tests with coverage report
 	@poetry run pytest --cov=src --cov-report=html --cov-report=term-missing
 
+test-cross-storage:
+	@poetry run pytest tests/integration/test_cross_storage.py -v
+
 clean-delta-tables: ## Clean Delta Lake test artifacts
 	@echo "Cleaning Delta Lake test tables..."
 	@rm -rf data/delta-tables/test_* || true

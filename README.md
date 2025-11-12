@@ -150,6 +150,11 @@ make test-integration    # Integration tests
 make test-data-quality   # Data quality tests
 make test-e2e            # End-to-end tests
 
+# Run specific test files
+poetry run pytest tests/integration/test_cross_storage.py -v    # Cross-storage CDC tests (Postgres → Kafka → Iceberg)
+poetry run pytest tests/integration/test_postgres_cdc.py -v     # Postgres CDC tests
+poetry run pytest tests/integration/test_iceberg_cdc.py -v      # Iceberg snapshot-based CDC tests
+
 # Generate coverage report
 make test-coverage
 ```
@@ -285,26 +290,38 @@ poetry run pytest tests/integration/test_deltalake_cdc.py \
 ### Monitor CDC Pipelines
 
 ```bash
-# Monitor all pipelines
-cdc-cli monitor
+# Open Grafana dashboards (default)
+poetry run cdc-demo monitor
 
-# Monitor specific pipeline
-cdc-cli monitor --pipeline postgres_customers_cdc
+# Open specific dashboards
+poetry run cdc-demo monitor grafana
+poetry run cdc-demo monitor prometheus
+poetry run cdc-demo monitor minio
+poetry run cdc-demo monitor debezium
 
-# Check CDC lag
-cdc-cli status --show-lag
+# Open all dashboards at once
+poetry run cdc-demo monitor all
+
+# Check service status
+poetry run cdc-demo status
 ```
 
 ### Validate Data Integrity
 
 ```bash
 # Run all validations
-cdc-cli validate --pipeline postgres_customers_cdc
+poetry run cdc-demo validate
 
-# Run specific validation
-cdc-cli validate --type row_count
-cdc-cli validate --type checksum
-cdc-cli validate --type schema
+# Run specific validation types
+poetry run cdc-demo validate integrity
+poetry run cdc-demo validate lag
+poetry run cdc-demo validate schema
+
+# Validate specific pipeline
+poetry run cdc-demo validate --pipeline postgres_customers_cdc
+
+# Check lag with threshold (in seconds)
+poetry run cdc-demo validate lag --threshold 10
 ```
 
 ### Trigger Schema Evolution
