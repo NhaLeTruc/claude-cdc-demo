@@ -260,3 +260,176 @@ def iceberg_test_namespace():
 
     # Cleanup after all tests
     cleanup_test_namespace(namespace)
+
+
+@pytest.fixture(scope="session", autouse=True)
+def clean_cdc_state():
+    """
+    Clean CDC pipeline state before test session starts.
+    This ensures tests start with a clean slate:
+    - Clears Postgres customers table and resets sequence
+    - Clears Iceberg table
+    - Resets Spark checkpoint to process from latest Kafka offset
+
+    This prevents duplicate customer_ids from previous runs.
+    """
+    import subprocess
+    import time
+
+    try:
+        # Step 1: Clear Postgres tables and reset sequences
+        try:
+            for table in ["customers", "schema_evolution_test"]:
+                result = subprocess.run(
+                    ["docker", "exec", "cdc-postgres", "psql", "-U", "cdcuser", "-d", "cdcdb", "-c",
+                     f"TRUNCATE TABLE {table} RESTART IDENTITY CASCADE;"],
+                    capture_output=True,
+                    timeout=10,
+                    text=True
+                )
+                if result.returncode == 0:
+                    print(f"\n✓ Cleared Postgres {table} table and reset sequence")
+                elif "does not exist" not in result.stderr:
+                    print(f"\n⚠ Could not clear Postgres {table}: {result.stderr}")
+        except Exception as e:
+            print(f"\n⚠ Error clearing Postgres: {e}")
+
+        # Step 2: Skip Iceberg table cleanup
+        # NOTE: We don't delete the Iceberg table to preserve its metadata across test runs.
+        # The Spark job uses CREATE TABLE IF NOT EXISTS, which will reuse existing table.
+        # Postgres TRUNCATE will reset customer_id sequence, so tests won't interfere.
+        print("✓ Skipping Iceberg table cleanup (table structure preserved)")
+
+        # Step 3: Delete Kafka topics AND Kafka Connect offsets to remove CDC state
+        try:
+            # First delete the topics
+            for topic in ["debezium.public.customers", "debezium.public.schema_evolution_test"]:
+                result = subprocess.run(
+                    ["docker", "exec", "cdc-kafka", "kafka-topics", "--bootstrap-server", "localhost:9092",
+                     "--delete", "--topic", topic],
+                    capture_output=True,
+                    timeout=10,
+                    text=True
+                )
+                if "marked for deletion" in result.stdout or result.returncode == 0:
+                    print(f"✓ Deleted Kafka topic {topic}")
+                elif "does not exist" not in result.stderr:
+                    print(f"⚠ Could not delete Kafka topic {topic}: {result.stderr}")
+
+            # Also delete Kafka Connect offset topic to reset Debezium's state
+            subprocess.run(
+                ["docker", "exec", "cdc-kafka", "kafka-topics", "--bootstrap-server", "localhost:9092",
+                 "--delete", "--topic", "connect-offsets"],
+                capture_output=True,
+                timeout=10,
+                check=False  # May not exist
+            )
+            subprocess.run(
+                ["docker", "exec", "cdc-kafka", "kafka-topics", "--bootstrap-server", "localhost:9092",
+                 "--delete", "--topic", "connect-status"],
+                capture_output=True,
+                timeout=10,
+                check=False  # May not exist
+            )
+
+            time.sleep(3)  # Wait for topic deletion
+
+            # Recreate data topics
+            for topic in ["debezium.public.customers", "debezium.public.schema_evolution_test"]:
+                subprocess.run(
+                    ["docker", "exec", "cdc-kafka", "kafka-topics", "--bootstrap-server", "localhost:9092",
+                     "--create", "--topic", topic, "--partitions", "1", "--replication-factor", "1"],
+                    capture_output=True,
+                    timeout=10,
+                    check=False  # May already exist
+                )
+            print("✓ Recreated Kafka topics and reset Kafka Connect offsets")
+
+            # Delete and recreate the Debezium connector to fully reset its state
+            try:
+                # Delete connector
+                subprocess.run(
+                    ["curl", "-X", "DELETE", "http://localhost:8083/connectors/postgres-cdc-connector"],
+                    capture_output=True,
+                    timeout=5,
+                    check=False
+                )
+                time.sleep(2)
+
+                # Recreate connector using the registration script
+                # Use Docker container names instead of localhost
+                connector_env = {
+                    **os.environ,
+                    "DEBEZIUM_HOST": "localhost",
+                    "POSTGRES_HOST": "cdc-postgres",  # Docker container name
+                    "POSTGRES_PORT": "5432",
+                    "POSTGRES_USER": "cdcuser",
+                    "POSTGRES_PASSWORD": "cdcpass",
+                    "POSTGRES_DB": "cdcdb",
+                }
+                result = subprocess.run(
+                    ["bash", "scripts/connectors/register-postgres-connector.sh"],
+                    capture_output=True,
+                    timeout=15,
+                    text=True,
+                    env=connector_env
+                )
+                if result.returncode == 0:
+                    print("✓ Recreated Debezium connector with fresh state")
+                else:
+                    print(f"⚠ Could not recreate connector: {result.stderr}")
+
+                time.sleep(5)  # Wait for connector to initialize
+            except Exception as restart_err:
+                print(f"⚠ Could not recreate Debezium connector: {restart_err}")
+        except Exception as e:
+            print(f"⚠ Error managing Kafka topics: {e}")
+
+        # Step 4: Reset Spark checkpoint and restart
+        try:
+            subprocess.run(
+                ["docker", "exec", "cdc-spark-streaming",
+                 "rm", "-rf", "/tmp/spark-checkpoints/kafka-to-iceberg"],
+                capture_output=True,
+                timeout=5
+            )
+
+            subprocess.run(
+                ["docker", "restart", "cdc-spark-streaming"],
+                capture_output=True,
+                timeout=30
+            )
+
+            print("✓ Reset Spark checkpoint and restarted container")
+            print("⏳ Waiting for Spark to initialize...")
+
+            # Wait for container to be healthy
+            max_wait = 60
+            wait_interval = 2
+            elapsed = 0
+            while elapsed < max_wait:
+                result = subprocess.run(
+                    ["docker", "inspect", "--format={{.State.Health.Status}}", "cdc-spark-streaming"],
+                    capture_output=True,
+                    text=True,
+                    timeout=5
+                )
+                health_status = result.stdout.strip()
+                if health_status == "healthy":
+                    print(f"✓ Spark container healthy after {elapsed}s")
+                    # Wait additional 10s for streaming query to fully start
+                    time.sleep(10)
+                    break
+                time.sleep(wait_interval)
+                elapsed += wait_interval
+            else:
+                print(f"⚠ Spark container not healthy after {max_wait}s, proceeding anyway...")
+        except Exception as e:
+            print(f"⚠ Could not reset Spark: {e}")
+
+    except Exception as e:
+        print(f"\n⚠ Error in CDC cleanup: {e}")
+
+    yield
+
+    # No cleanup needed after session

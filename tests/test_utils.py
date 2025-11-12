@@ -11,7 +11,7 @@ def get_kafka_topic(table_name: str) -> str:
     Get Kafka topic name for a given table from environment variables.
 
     Args:
-        table_name: The table name (e.g., 'customers', 'orders', 'schema_evo_test')
+        table_name: The table name (e.g., 'customers', 'orders', 'schema_evolution_test')
 
     Returns:
         The Kafka topic name from environment variables
@@ -186,6 +186,117 @@ def ensure_iceberg_table_exists(
         timeout_seconds=timeout_seconds,
         poll_interval=2.0,
         error_message=f"Iceberg table {table_name} not created"
+    )
+
+
+def wait_for_kafka_event(
+    topic: str,
+    filter_func: Callable[[dict], bool],
+    timeout_seconds: int = 30,
+    bootstrap_servers: str = "localhost:29092"
+) -> Optional[dict]:
+    """
+    Wait for a specific event to appear in Kafka topic.
+
+    Args:
+        topic: Kafka topic name
+        filter_func: Function that returns True when the desired event is found
+        timeout_seconds: Maximum time to wait (default: 30)
+        bootstrap_servers: Kafka bootstrap servers (default: localhost:29092)
+
+    Returns:
+        The matching event, or None if not found
+
+    Raises:
+        TimeoutError: If event not found within timeout
+    """
+    from kafka import KafkaConsumer
+    import json
+
+    start_time = time.time()
+
+    consumer = KafkaConsumer(
+        topic,
+        bootstrap_servers=bootstrap_servers,
+        auto_offset_reset='earliest',
+        consumer_timeout_ms=int((timeout_seconds * 1000) / 2),  # Half of total timeout
+        value_deserializer=safe_json_deserializer
+    )
+
+    try:
+        for message in consumer:
+            payload = message.value
+            # Skip tombstone records
+            if payload is None:
+                continue
+
+            if filter_func(payload):
+                consumer.close()
+                return payload
+
+            # Check timeout
+            if time.time() - start_time > timeout_seconds:
+                break
+
+        consumer.close()
+        raise TimeoutError(f"Event not found in topic {topic} within {timeout_seconds}s")
+
+    except Exception as e:
+        consumer.close()
+        if isinstance(e, TimeoutError):
+            raise
+        raise TimeoutError(f"Error while waiting for Kafka event: {e}")
+
+
+def wait_for_iceberg_record(
+    table_manager,
+    filter_condition: str,
+    timeout_seconds: int = 60,
+    poll_interval: float = 3.0,
+    min_count: int = 1
+) -> list:
+    """
+    Wait for record(s) to appear in Iceberg table.
+
+    Args:
+        table_manager: IcebergTableManager instance
+        filter_condition: SQL-like filter condition (e.g., "customer_id = 123")
+        timeout_seconds: Maximum time to wait (default: 60)
+        poll_interval: Time between checks in seconds (default: 3.0)
+        min_count: Minimum number of records expected (default: 1)
+
+    Returns:
+        List of matching records
+
+    Raises:
+        TimeoutError: If records not found within timeout
+    """
+    start_time = time.time()
+    last_count = 0
+
+    while time.time() - start_time < timeout_seconds:
+        try:
+            if not table_manager.table_exists():
+                time.sleep(poll_interval)
+                continue
+
+            result = table_manager.query_table(filter_condition=filter_condition)
+            last_count = len(result)
+
+            if last_count >= min_count:
+                return result
+
+        except Exception as e:
+            # Log but continue polling
+            pass
+
+        time.sleep(poll_interval)
+
+    # Timeout occurred
+    table_name = f"{table_manager.config.namespace}.{table_manager.config.table_name}"
+    raise TimeoutError(
+        f"Expected at least {min_count} record(s) in Iceberg table {table_name} "
+        f"with filter '{filter_condition}', but found {last_count} after {timeout_seconds}s"
     )
 
 
