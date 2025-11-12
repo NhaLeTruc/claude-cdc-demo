@@ -36,7 +36,12 @@ curl -i -X POST \
       "transforms": "unwrap",
       "transforms.unwrap.type": "io.debezium.transforms.ExtractNewRecordState",
       "transforms.unwrap.drop.tombstones": "false",
-      "include.schema.changes": "false"
+      "transforms.unwrap.delete.handling.mode": "rewrite",
+      "transforms.unwrap.add.fields": "op,db,table,ts_ms",
+      "transforms.unwrap.add.fields.prefix": "__",
+      "include.schema.changes": "false",
+      "schema.history.internal.kafka.bootstrap.servers": "kafka:9092",
+      "schema.history.internal.kafka.topic": "schema-changes.debezium.mysql"
     }
   }'
 

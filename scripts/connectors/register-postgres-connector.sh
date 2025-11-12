@@ -26,10 +26,11 @@ curl -i -X POST \
       "database.password": "'"${POSTGRES_PASSWORD}"'",
       "database.dbname": "'"${POSTGRES_DB}"'",
       "database.server.name": "postgres",
-      "table.include.list": "public.customers,public.orders",
+      "table.include.list": "public.customers,public.orders,public.products,public.inventory,public.schema_evolution_test",
       "plugin.name": "pgoutput",
       "publication.name": "dbz_publication",
       "slot.name": "debezium",
+      "snapshot.mode": "initial",
       "key.converter": "org.apache.kafka.connect.json.JsonConverter",
       "value.converter": "org.apache.kafka.connect.json.JsonConverter",
       "key.converter.schemas.enable": "false",
@@ -37,7 +38,10 @@ curl -i -X POST \
       "topic.prefix": "debezium",
       "transforms": "unwrap",
       "transforms.unwrap.type": "io.debezium.transforms.ExtractNewRecordState",
-      "transforms.unwrap.drop.tombstones": "false"
+      "transforms.unwrap.drop.tombstones": "false",
+      "transforms.unwrap.delete.handling.mode": "rewrite",
+      "transforms.unwrap.add.fields": "op,db,table,ts_ms,lsn",
+      "transforms.unwrap.add.fields.prefix": "__"
     }
   }'
 
