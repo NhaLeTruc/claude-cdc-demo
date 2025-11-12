@@ -45,8 +45,8 @@ class TestIcebergIncrementalCDC:
 
         # Write initial data (Snapshot 1)
         initial_data = [
-            {"id": 1, "name": "Customer A", "status": "active"},
-            {"id": 2, "name": "Customer B", "status": "active"},
+            {"customer_id": 1, "name": "Customer A", "status": "active"},
+            {"customer_id": 2, "name": "Customer B", "status": "active"},
         ]
 
         # Simulate table write
@@ -61,7 +61,7 @@ class TestIcebergIncrementalCDC:
 
         # Write more data (Snapshot 2)
         new_data = [
-            {"id": 3, "name": "Customer C", "status": "active"},
+            {"customer_id": 3, "name": "Customer C", "status": "active"},
         ]
         iceberg_table_manager.append_data(new_data)
 
@@ -80,7 +80,7 @@ class TestIcebergIncrementalCDC:
         )
 
         assert len(changes) >= 1
-        assert any(c["id"] == 3 for c in changes)
+        assert any(c["customer_id"] == 3 for c in changes)
 
     def test_partition_evolution_handling(self, iceberg_table_manager):
         """Test handling partition evolution."""
@@ -152,17 +152,17 @@ class TestIcebergIncrementalCDC:
         )
 
         # INSERT
-        data = [{"id": 1, "name": "Customer 1", "status": "active"}]
+        data = [{"customer_id": 1, "name": "Customer 1", "status": "active"}]
         iceberg_table_manager.write_data(data)
         snapshot_after_insert = tracker.get_current_snapshot()
 
         # UPDATE (overwrite)
-        updated_data = [{"id": 1, "name": "Customer 1 Updated", "status": "active"}]
-        iceberg_table_manager.overwrite_data(updated_data, filter_condition="id = 1")
+        updated_data = [{"customer_id": 1, "name": "Customer 1 Updated", "status": "active"}]
+        iceberg_table_manager.overwrite_data(updated_data, filter_condition="customer_id = 1")
         snapshot_after_update = tracker.get_current_snapshot()
 
         # DELETE
-        iceberg_table_manager.delete_data(filter_condition="id = 1")
+        iceberg_table_manager.delete_data(filter_condition="customer_id = 1")
         snapshot_after_delete = tracker.get_current_snapshot()
 
         reader = IncrementalReader(
