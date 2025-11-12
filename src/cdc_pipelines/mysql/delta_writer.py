@@ -114,11 +114,11 @@ class MySQLDeltaLakeWriter:
 
         try:
             # Separate events by operation type
-            inserts = [e for e in events if e.get("operation") == "INSERT"]
+            inserts = [e for e in events if e.get("operation") in ("INSERT", "READ")]
             updates = [e for e in events if e.get("operation") == "UPDATE"]
             deletes = [e for e in events if e.get("operation") == "DELETE"]
 
-            # Initialize table with first insert if needed
+            # Initialize table with first insert/read if needed
             if not self._table_initialized and inserts:
                 self._initialize_table(inserts[0]["data"])
 
