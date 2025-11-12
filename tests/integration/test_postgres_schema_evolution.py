@@ -77,7 +77,7 @@ def verify_schema_in_registry(subject_name):
     Verify schema exists in Schema Registry and return schema data.
 
     Args:
-        subject_name: Subject name (e.g., 'debezium.public.schema_evo_test-value')
+        subject_name: Subject name (e.g., 'debezium.public.schema_evolution_test-value')
 
     Returns:
         dict: Schema data if found, None otherwise
@@ -111,28 +111,78 @@ def test_table(postgres_conn):
     """Create and teardown test table."""
     cursor = postgres_conn.cursor()
 
-    # Create test table (matches Debezium configuration)
-    cursor.execute("""
-        DROP TABLE IF EXISTS schema_evolution_test CASCADE
-    """)
+    try:
+        # Create test table (matches Debezium configuration)
+        cursor.execute("""
+            DROP TABLE IF EXISTS schema_evolution_test CASCADE
+        """)
 
-    cursor.execute("""
-        CREATE TABLE schema_evolution_test (
-            id SERIAL PRIMARY KEY,
-            name VARCHAR(100) NOT NULL,
-            value INTEGER DEFAULT 0,
-            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-        )
-    """)
+        cursor.execute("""
+            CREATE TABLE schema_evolution_test (
+                id SERIAL PRIMARY KEY,
+                name VARCHAR(100) NOT NULL,
+                value INTEGER DEFAULT 0,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        """)
 
-    postgres_conn.commit()
+        # CRITICAL: Add table to Postgres publication for Debezium pgoutput plugin
+        # Without this, Debezium cannot capture CDC events from this table
+        cursor.execute("""
+            ALTER PUBLICATION dbz_publication ADD TABLE schema_evolution_test
+        """)
 
-    yield cursor
+        postgres_conn.commit()
 
-    # Cleanup
-    cursor.execute("DROP TABLE IF EXISTS schema_evolution_test CASCADE")
-    postgres_conn.commit()
-    cursor.close()
+        # Insert a dummy record so Debezium's snapshot captures something
+        # This ensures the table is being monitored even before the actual test starts
+        cursor.execute("""
+            INSERT INTO schema_evolution_test (name, value)
+            VALUES ('_snapshot_marker', 0)
+            RETURNING id
+        """)
+        marker_id = cursor.fetchone()[0]
+        postgres_conn.commit()
+
+        # Restart Debezium connector to pick up the new publication table
+        # Debezium caches the publication table list, so it needs a restart
+        try:
+            debezium_url = os.getenv("DEBEZIUM_URL", "http://localhost:8083")
+            requests.post(f"{debezium_url}/connectors/postgres-cdc-connector/restart", timeout=5)
+            # Wait for connector to restart, snapshot the table, and stabilize
+            time.sleep(8)
+        except Exception as e:
+            # If restart fails, log but continue - the test might still work
+            print(f"Warning: Failed to restart Debezium connector: {e}")
+
+        # Delete the marker record - this will also be captured by CDC
+        cursor.execute("""
+            DELETE FROM schema_evolution_test WHERE id = %s
+        """, (marker_id,))
+        postgres_conn.commit()
+
+        # Give CDC time to capture the delete event
+        time.sleep(2)
+
+        yield cursor
+
+    finally:
+        # Cleanup - ensure we rollback any failed transactions first
+        try:
+            postgres_conn.rollback()  # Rollback any failed transactions
+
+            # Remove table from publication before dropping it
+            cursor.execute("""
+                ALTER PUBLICATION dbz_publication DROP TABLE IF EXISTS schema_evolution_test
+            """)
+
+            cursor.execute("DROP TABLE IF EXISTS schema_evolution_test CASCADE")
+            postgres_conn.commit()
+        except Exception as e:
+            # If cleanup fails, still rollback to prevent transaction pollution
+            postgres_conn.rollback()
+        finally:
+            cursor.close()
 
 
 @pytest.mark.integration
@@ -161,38 +211,58 @@ class TestPostgresSchemaEvolution:
         """
         # Step 1: Insert initial data
         test_table.execute("""
-            INSERT INTO schema_evo_test (name, value)
+            INSERT INTO schema_evolution_test (name, value)
             VALUES ('Initial Record', 100)
             RETURNING id
         """)
         initial_id = test_table.fetchone()[0]
         postgres_conn.commit()
 
-        # Step 2: Wait for CDC to capture
-        time.sleep(3)
+        # Step 2: Wait for CDC to capture with polling and retry
+        from tests.test_utils import wait_for_condition
 
-        # Verify event in Kafka
-        consumer = KafkaConsumer(
-            get_kafka_topic("schema_evolution_test"),
-            bootstrap_servers=os.getenv("KAFKA_BOOTSTRAP_SERVERS", "localhost:29092"),
-            auto_offset_reset='earliest',
-            consumer_timeout_ms=5000,
-            value_deserializer=safe_json_deserializer
+        def check_initial_event_in_kafka():
+            """Poll Kafka for the initial event with timeout."""
+            consumer = KafkaConsumer(
+                get_kafka_topic("schema_evolution_test"),
+                bootstrap_servers=os.getenv("KAFKA_BOOTSTRAP_SERVERS", "localhost:29092"),
+                auto_offset_reset='earliest',
+                consumer_timeout_ms=3000,
+                value_deserializer=safe_json_deserializer
+            )
+
+            try:
+                for message in consumer:
+                    event = message.value
+                    # Skip tombstone records (None values from DELETE operations)
+                    if event is None:
+                        continue
+
+                    # Handle both unwrapped (flat) and wrapped (nested) formats
+                    # Unwrapped format (from ExtractNewRecordState transform): {id: ..., name: ..., __op: ...}
+                    # Wrapped format: {payload: {after: {id: ..., name: ...}}}
+                    if 'payload' in event:
+                        # Wrapped format
+                        after = event['payload'].get('after', {})
+                    else:
+                        # Unwrapped format
+                        after = event
+
+                    if after.get('id') == initial_id:
+                        # Verify initial schema doesn't have new column
+                        assert 'description' not in after
+                        return True
+            finally:
+                consumer.close()
+
+            return False
+
+        wait_for_condition(
+            condition_func=check_initial_event_in_kafka,
+            timeout_seconds=30,
+            poll_interval=2.0,
+            error_message=f"Initial CDC event for id={initial_id} not found in Kafka topic"
         )
-
-        initial_event_found = False
-        for message in consumer:
-            event = message.value
-            # Skip tombstone records (None values from DELETE operations)
-            if event is None:
-                continue
-            if event.get('payload', {}).get('after', {}).get('id') == initial_id:
-                # Verify initial schema doesn't have new column
-                assert 'description' not in event['payload']['after']
-                initial_event_found = True
-                break
-
-        assert initial_event_found, "Initial CDC event not found"
 
         # Step 3: ADD new column
         test_table.execute("""
@@ -202,7 +272,7 @@ class TestPostgresSchemaEvolution:
         postgres_conn.commit()
 
         # Wait for schema change to propagate
-        time.sleep(5)
+        time.sleep(6)
 
         # Step 4: Insert data with new column
         test_table.execute("""
@@ -213,34 +283,49 @@ class TestPostgresSchemaEvolution:
         new_id = test_table.fetchone()[0]
         postgres_conn.commit()
 
-        # Step 5: Verify CDC includes new column
-        time.sleep(3)
+        # Step 5: Verify CDC includes new column with polling
+        def check_new_event_in_kafka():
+            """Poll Kafka for the event with new column."""
+            consumer = KafkaConsumer(
+                get_kafka_topic("schema_evolution_test"),
+                bootstrap_servers=os.getenv("KAFKA_BOOTSTRAP_SERVERS", "localhost:29092"),
+                auto_offset_reset='earliest',
+                consumer_timeout_ms=3000,
+                value_deserializer=safe_json_deserializer
+            )
 
-        consumer = KafkaConsumer(
-            get_kafka_topic("schema_evo_test"),
-            bootstrap_servers=os.getenv("KAFKA_BOOTSTRAP_SERVERS", "localhost:29092"),
-            auto_offset_reset='latest',
-            consumer_timeout_ms=5000,
-            value_deserializer=safe_json_deserializer
+            try:
+                for message in consumer:
+                    event = message.value
+                    # Skip tombstone records
+                    if event is None:
+                        continue
+
+                    # Handle both unwrapped and wrapped formats
+                    if 'payload' in event:
+                        after = event['payload'].get('after', {})
+                    else:
+                        after = event
+
+                    if after.get('id') == new_id:
+                        # Verify new schema includes description
+                        assert 'description' in after
+                        assert after['description'] == 'This has a description'
+                        return True
+            finally:
+                consumer.close()
+
+            return False
+
+        wait_for_condition(
+            condition_func=check_new_event_in_kafka,
+            timeout_seconds=30,
+            poll_interval=2.0,
+            error_message=f"CDC event with new column for id={new_id} not found in Kafka topic"
         )
 
-        new_event_found = False
-        for message in consumer:
-            event = message.value
-            # Skip tombstone records
-            if event is None:
-                continue
-            if event.get('payload', {}).get('after', {}).get('id') == new_id:
-                # Verify new schema includes description
-                assert 'description' in event['payload']['after']
-                assert event['payload']['after']['description'] == 'This has a description'
-                new_event_found = True
-                break
-
-        assert new_event_found, "CDC event with new column not found"
-
         # Step 6: Verify schema evolution in Schema Registry
-        schema_data = verify_schema_in_registry('debezium.public.schema_evo_test-value')
+        schema_data = verify_schema_in_registry('debezium.public.schema_evolution_test-value')
         if schema_data:
             # Verify schema includes description field
             schema_str = str(schema_data.get('schema', ''))
@@ -257,38 +342,38 @@ class TestPostgresSchemaEvolution:
         """
         # Insert data with column
         test_table.execute("""
-            INSERT INTO schema_evo_test (name, value)
+            INSERT INTO schema_evolution_test (name, value)
             VALUES ('Before Drop', 300)
             RETURNING id
         """)
         before_id = test_table.fetchone()[0]
         postgres_conn.commit()
 
-        time.sleep(3)
+        time.sleep(4)
 
         # Drop column
         test_table.execute("""
-            ALTER TABLE schema_evo_test
+            ALTER TABLE schema_evolution_test
             DROP COLUMN value
         """)
         postgres_conn.commit()
 
-        time.sleep(5)
+        time.sleep(6)
 
         # Insert data after drop
         test_table.execute("""
-            INSERT INTO schema_evo_test (name)
+            INSERT INTO schema_evolution_test (name)
             VALUES ('After Drop')
             RETURNING id
         """)
         after_id = test_table.fetchone()[0]
         postgres_conn.commit()
 
-        time.sleep(3)
+        time.sleep(4)
 
         # Verify CDC event doesn't include dropped column
         consumer = KafkaConsumer(
-            get_kafka_topic("schema_evo_test"),
+            get_kafka_topic("schema_evolution_test"),
             bootstrap_servers=os.getenv("KAFKA_BOOTSTRAP_SERVERS", "localhost:29092"),
             auto_offset_reset='latest',
             consumer_timeout_ms=5000,
@@ -308,7 +393,7 @@ class TestPostgresSchemaEvolution:
                 break
 
         # Verify schema evolution in Schema Registry
-        schema_data = verify_schema_in_registry('debezium.public.schema_evo_test-value')
+        schema_data = verify_schema_in_registry('debezium.public.schema_evolution_test-value')
         if schema_data:
             schema_str = str(schema_data.get('schema', ''))
             # Verify 'value' column removed from schema
@@ -325,38 +410,38 @@ class TestPostgresSchemaEvolution:
         """
         # Insert with original type
         test_table.execute("""
-            INSERT INTO schema_evo_test (name, value)
+            INSERT INTO schema_evolution_test (name, value)
             VALUES ('Before Type Change', 12345)
             RETURNING id
         """)
         postgres_conn.commit()
 
-        time.sleep(3)
+        time.sleep(4)
 
         # Change type (INTEGER -> BIGINT)
         test_table.execute("""
-            ALTER TABLE schema_evo_test
+            ALTER TABLE schema_evolution_test
             ALTER COLUMN value TYPE BIGINT
         """)
         postgres_conn.commit()
 
-        time.sleep(5)
+        time.sleep(6)
 
         # Insert with new type (can now handle larger values)
         large_value = 9223372036854775807  # Max BIGINT
         test_table.execute("""
-            INSERT INTO schema_evo_test (name, value)
+            INSERT INTO schema_evolution_test (name, value)
             VALUES ('After Type Change', %s)
             RETURNING id
         """, (large_value,))
         new_id = test_table.fetchone()[0]
         postgres_conn.commit()
 
-        time.sleep(3)
+        time.sleep(4)
 
         # Verify CDC event has correct type
         consumer = KafkaConsumer(
-            get_kafka_topic("schema_evo_test"),
+            get_kafka_topic("schema_evolution_test"),
             bootstrap_servers=os.getenv("KAFKA_BOOTSTRAP_SERVERS", "localhost:29092"),
             auto_offset_reset='latest',
             consumer_timeout_ms=5000,
@@ -374,7 +459,7 @@ class TestPostgresSchemaEvolution:
                 break
 
         # Verify schema type change in Schema Registry
-        schema_data = verify_schema_in_registry('debezium.public.schema_evo_test-value')
+        schema_data = verify_schema_in_registry('debezium.public.schema_evolution_test-value')
         if schema_data:
             schema_str = str(schema_data.get('schema', ''))
             # Verify schema reflects BIGINT type (typically as int64)
@@ -391,37 +476,37 @@ class TestPostgresSchemaEvolution:
         """
         # Insert with original column name
         test_table.execute("""
-            INSERT INTO schema_evo_test (name, value)
+            INSERT INTO schema_evolution_test (name, value)
             VALUES ('Before Rename', 999)
             RETURNING id
         """)
         postgres_conn.commit()
 
-        time.sleep(3)
+        time.sleep(4)
 
         # Rename column
         test_table.execute("""
-            ALTER TABLE schema_evo_test
+            ALTER TABLE schema_evolution_test
             RENAME COLUMN name TO display_name
         """)
         postgres_conn.commit()
 
-        time.sleep(5)
+        time.sleep(6)
 
         # Insert with new column name
         test_table.execute("""
-            INSERT INTO schema_evo_test (display_name, value)
+            INSERT INTO schema_evolution_test (display_name, value)
             VALUES ('After Rename', 1000)
             RETURNING id
         """)
         new_id = test_table.fetchone()[0]
         postgres_conn.commit()
 
-        time.sleep(3)
+        time.sleep(4)
 
         # Verify CDC event uses new column name
         consumer = KafkaConsumer(
-            get_kafka_topic("schema_evo_test"),
+            get_kafka_topic("schema_evolution_test"),
             bootstrap_servers=os.getenv("KAFKA_BOOTSTRAP_SERVERS", "localhost:29092"),
             auto_offset_reset='latest',
             consumer_timeout_ms=5000,
@@ -442,7 +527,7 @@ class TestPostgresSchemaEvolution:
                 break
 
         # Verify schema rename in Schema Registry
-        schema_data = verify_schema_in_registry('debezium.public.schema_evo_test-value')
+        schema_data = verify_schema_in_registry('debezium.public.schema_evolution_test-value')
         if schema_data:
             schema_str = str(schema_data.get('schema', ''))
             # Verify new column name in schema
@@ -460,50 +545,50 @@ class TestPostgresSchemaEvolution:
         """
         # Initial insert
         test_table.execute("""
-            INSERT INTO schema_evo_test (name, value)
+            INSERT INTO schema_evolution_test (name, value)
             VALUES ('Initial', 1)
             RETURNING id
         """)
         postgres_conn.commit()
-        time.sleep(3)
+        time.sleep(4)
 
         # Change 1: Add column
         test_table.execute("""
-            ALTER TABLE schema_evo_test
+            ALTER TABLE schema_evolution_test
             ADD COLUMN email VARCHAR(255)
         """)
         postgres_conn.commit()
-        time.sleep(5)
+        time.sleep(6)
 
         # Change 2: Rename column
         test_table.execute("""
-            ALTER TABLE schema_evo_test
+            ALTER TABLE schema_evolution_test
             RENAME COLUMN name TO display_name
         """)
         postgres_conn.commit()
-        time.sleep(5)
+        time.sleep(6)
 
         # Change 3: Change type
         test_table.execute("""
-            ALTER TABLE schema_evo_test
+            ALTER TABLE schema_evolution_test
             ALTER COLUMN value TYPE BIGINT
         """)
         postgres_conn.commit()
-        time.sleep(5)
+        time.sleep(6)
 
         # Insert after all changes
         test_table.execute("""
-            INSERT INTO schema_evo_test (display_name, value, email)
+            INSERT INTO schema_evolution_test (display_name, value, email)
             VALUES ('Final', 12345678901234, 'test@example.com')
             RETURNING id
         """)
         final_id = test_table.fetchone()[0]
         postgres_conn.commit()
-        time.sleep(3)
+        time.sleep(4)
 
         # Verify final schema in CDC
         consumer = KafkaConsumer(
-            get_kafka_topic("schema_evo_test"),
+            get_kafka_topic("schema_evolution_test"),
             bootstrap_servers=os.getenv("KAFKA_BOOTSTRAP_SERVERS", "localhost:29092"),
             auto_offset_reset='latest',
             consumer_timeout_ms=5000,
@@ -527,7 +612,7 @@ class TestPostgresSchemaEvolution:
                 break
 
         # Verify all schema changes in Schema Registry
-        schema_data = verify_schema_in_registry('debezium.public.schema_evo_test-value')
+        schema_data = verify_schema_in_registry('debezium.public.schema_evolution_test-value')
         if schema_data:
             schema_str = str(schema_data.get('schema', ''))
             # Verify all changes reflected in schema
@@ -545,40 +630,40 @@ class TestPostgresSchemaEvolution:
 
         for name, value in test_data:
             test_table.execute("""
-                INSERT INTO schema_evo_test (name, value)
+                INSERT INTO schema_evolution_test (name, value)
                 VALUES (%s, %s)
             """, (name, value))
 
         postgres_conn.commit()
-        time.sleep(5)
+        time.sleep(6)
 
         # Get initial count
-        test_table.execute("SELECT COUNT(*) FROM schema_evo_test")
+        test_table.execute("SELECT COUNT(*) FROM schema_evolution_test")
         initial_count = test_table.fetchone()[0]
 
         # Perform schema change
         test_table.execute("""
-            ALTER TABLE schema_evo_test
+            ALTER TABLE schema_evolution_test
             ADD COLUMN status VARCHAR(50) DEFAULT 'active'
         """)
         postgres_conn.commit()
-        time.sleep(5)
+        time.sleep(6)
 
         # Verify no data loss
-        test_table.execute("SELECT COUNT(*) FROM schema_evo_test")
+        test_table.execute("SELECT COUNT(*) FROM schema_evolution_test")
         final_count = test_table.fetchone()[0]
 
         assert final_count == initial_count, "Data loss detected after schema evolution"
 
         # Verify all original data still accessible
-        test_table.execute("SELECT name, value FROM schema_evo_test ORDER BY id")
+        test_table.execute("SELECT name, value FROM schema_evolution_test ORDER BY id")
         retrieved_data = [(row[0], row[1]) for row in test_table.fetchall()]
 
         for original, retrieved in zip(test_data, retrieved_data):
             assert original == retrieved, "Data mismatch after schema evolution"
 
         # Verify schema evolution in Schema Registry preserves existing fields
-        schema_data = verify_schema_in_registry('debezium.public.schema_evo_test-value')
+        schema_data = verify_schema_in_registry('debezium.public.schema_evolution_test-value')
         if schema_data:
             schema_str = str(schema_data.get('schema', ''))
             # Verify original columns still in schema
