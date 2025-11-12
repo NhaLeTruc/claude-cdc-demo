@@ -133,18 +133,26 @@ class MySQLCDCPipeline:
         for topic_partition, records in messages.items():
             for record in records:
                 try:
+                    # Skip tombstone records (None values from DELETE operations)
+                    if record.value is None:
+                        logger.debug("Skipping tombstone record")
+                        continue
+
                     # Parse Debezium event
                     parsed_event = self.event_parser.parse(record.value)
 
-                    # Track metrics
-                    table = parsed_event.get("table", "unknown")
-                    operation = parsed_event.get("operation", "UNKNOWN")
-                    mysql_cdc_events_processed_total.labels(
-                        table=table, operation=operation
-                    ).inc()
+                    # Track metrics (optional, don't fail if metrics are unavailable)
+                    try:
+                        table = parsed_event.get("table", "unknown")
+                        operation = parsed_event.get("operation", "UNKNOWN")
+                        mysql_cdc_events_processed_total.labels(
+                            table=table, operation=operation
+                        ).inc()
 
-                    # Calculate lag
-                    self._update_lag_metric(parsed_event, table)
+                        # Calculate lag
+                        self._update_lag_metric(parsed_event, table)
+                    except Exception as metrics_error:
+                        logger.debug(f"Failed to update metrics: {metrics_error}")
 
                     events_batch.append(parsed_event)
 
@@ -155,7 +163,11 @@ class MySQLCDCPipeline:
 
         # Write batch to DeltaLake
         if events_batch:
-            mysql_cdc_batch_size.observe(len(events_batch))
+            try:
+                mysql_cdc_batch_size.observe(len(events_batch))
+            except Exception:
+                pass  # Metrics are optional
+
             self.delta_writer.write_batch(events_batch)
             self._events_processed += len(events_batch)
 
@@ -164,20 +176,31 @@ class MySQLCDCPipeline:
                 f"(total: {self._events_processed})"
             )
 
-    def _deserialize_json(self, message: bytes) -> Dict[str, Any]:
+    def _deserialize_json(self, message: Optional[bytes]) -> Optional[Dict[str, Any]]:
         """
         Deserialize JSON message from Kafka.
 
+        Handles tombstone records (None values) which are sent for DELETE operations.
+
         Args:
-            message: Raw message bytes
+            message: Raw message bytes (can be None for tombstone records)
 
         Returns:
-            Deserialized dictionary
+            Deserialized dictionary, or None for tombstone records
         """
         try:
+            if message is None:
+                # Tombstone record (DELETE operation)
+                return None
+
             return json.loads(message.decode("utf-8"))
         except json.JSONDecodeError as e:
             logger.error(f"Failed to deserialize JSON: {e}")
+            logger.debug(f"Message bytes (first 100): {message[:100] if message else None}")
+            return {}
+        except (AttributeError, UnicodeDecodeError) as e:
+            logger.error(f"Failed to decode message: {e}")
+            logger.debug(f"Message bytes (first 100): {message[:100] if message else None}")
             return {}
 
     def _update_lag_metric(self, event: Dict[str, Any], table: str) -> None:
