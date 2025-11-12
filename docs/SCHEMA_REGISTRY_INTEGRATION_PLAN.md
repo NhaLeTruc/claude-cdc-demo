@@ -156,7 +156,7 @@ def verify_schema_registry_version(subject_name):
 
 # In test_add_column_propagates_through_cdc:
 # After line 154, add:
-schema_data = verify_schema_registry_version('debezium.public.schema_evo_test-value')
+schema_data = verify_schema_registry_version('debezium.public.schema_evolution_test-value')
 if schema_data:
     # Verify schema evolution in Schema Registry
     assert 'description' in str(schema_data['schema'])
