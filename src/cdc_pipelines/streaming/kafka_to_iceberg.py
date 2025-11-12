@@ -48,6 +48,7 @@ class KafkaToIcebergStreamingJob:
         iceberg_table: str,
         checkpoint_location: str,
         app_name: str = "CDC-Kafka-to-Iceberg",
+        trigger_interval: str = "10 seconds",
     ):
         """
         Initialize Kafka to Iceberg Streaming Job.
@@ -61,6 +62,7 @@ class KafkaToIcebergStreamingJob:
             iceberg_table: Iceberg table name
             checkpoint_location: Checkpoint directory for streaming state
             app_name: Spark application name
+            trigger_interval: Spark micro-batch trigger interval (default: "10 seconds")
 
         Raises:
             ImportError: If PySpark is not installed
@@ -79,12 +81,14 @@ class KafkaToIcebergStreamingJob:
         self.iceberg_table = iceberg_table
         self.checkpoint_location = checkpoint_location
         self.app_name = app_name
+        self.trigger_interval = trigger_interval
 
         self.spark: Optional[SparkSession] = None
 
         logger.info(
             f"Initialized KafkaToIcebergStreamingJob: "
-            f"{kafka_topic} → {iceberg_namespace}.{iceberg_table}"
+            f"{kafka_topic} → {iceberg_namespace}.{iceberg_table} "
+            f"(trigger: {trigger_interval})"
         )
 
     def create_spark_session(self) -> SparkSession:
@@ -94,73 +98,86 @@ class KafkaToIcebergStreamingJob:
         Returns:
             Configured SparkSession
         """
+        # Get MinIO/S3 configuration from environment
+        s3_endpoint = os.getenv("S3_ENDPOINT", "http://minio:9000")
+        s3_access_key = os.getenv("S3_ACCESS_KEY", "minioadmin")
+        s3_secret_key = os.getenv("S3_SECRET_KEY", "minioadmin")
+
         spark = (
             SparkSession.builder
             .appName(self.app_name)
+            # Override Delta Lake extensions with Iceberg
             .config("spark.sql.extensions", "org.apache.iceberg.spark.extensions.IcebergSparkSessionExtensions")
+            # Keep spark_catalog as-is (don't override to avoid conflicts)
+            # Instead, use a separate catalog for Iceberg - use REST catalog for integration tests
             .config(f"spark.sql.catalog.{self.iceberg_catalog}", "org.apache.iceberg.spark.SparkCatalog")
-            .config(f"spark.sql.catalog.{self.iceberg_catalog}.type", "hadoop")
+            .config(f"spark.sql.catalog.{self.iceberg_catalog}.catalog-impl", "org.apache.iceberg.rest.RESTCatalog")
+            .config(f"spark.sql.catalog.{self.iceberg_catalog}.uri", "http://iceberg-rest:8181")
             .config(f"spark.sql.catalog.{self.iceberg_catalog}.warehouse", self.iceberg_warehouse)
-            .config("spark.jars.packages",
-                    "org.apache.iceberg:iceberg-spark-runtime-3.5_2.12:1.5.2,"
-                    "org.apache.spark:spark-sql-kafka-0-10_2.12:3.5.0")
+            # S3/MinIO configuration for Iceberg
+            .config(f"spark.sql.catalog.{self.iceberg_catalog}.s3.endpoint", s3_endpoint)
+            .config(f"spark.sql.catalog.{self.iceberg_catalog}.s3.access-key-id", s3_access_key)
+            .config(f"spark.sql.catalog.{self.iceberg_catalog}.s3.secret-access-key", s3_secret_key)
+            .config(f"spark.sql.catalog.{self.iceberg_catalog}.s3.path-style-access", "true")
+            # Hadoop S3A configuration (for underlying file operations)
+            .config("spark.hadoop.fs.s3a.endpoint", s3_endpoint)
+            .config("spark.hadoop.fs.s3a.access.key", s3_access_key)
+            .config("spark.hadoop.fs.s3a.secret.key", s3_secret_key)
+            .config("spark.hadoop.fs.s3a.path.style.access", "true")
+            .config("spark.hadoop.fs.s3a.impl", "org.apache.hadoop.fs.s3a.S3AFileSystem")
+            .config("spark.hadoop.fs.s3a.connection.ssl.enabled", "false")
+            # Don't override jars.packages if Delta is already loaded
+            # .config("spark.jars.packages",
+            #         "org.apache.iceberg:iceberg-spark-runtime-3.5_2.12:1.5.2,"
+            #         "org.apache.spark:spark-sql-kafka-0-10_2.12:3.5.0")
+            # Streaming and performance
             .config("spark.sql.streaming.checkpointLocation", self.checkpoint_location)
             .config("spark.sql.adaptive.enabled", "true")
             .master("local[*]")
             .getOrCreate()
         )
 
-        logger.info("Created Spark session with Iceberg support")
+        logger.info("Created Spark session with Iceberg and S3/MinIO support")
         return spark
 
     def define_debezium_schema(self) -> StructType:
         """
-        Define Debezium CDC event schema for customers table.
+        Define Debezium CDC event schema for customers table (unwrapped format).
+
+        This schema expects events from Debezium with ExtractNewRecordState transform,
+        which produces flattened records with CDC metadata as additional fields.
 
         Returns:
-            StructType representing Debezium event structure
+            StructType representing unwrapped Debezium event structure
         """
-        # Debezium payload schema for customers
-        before_after_schema = StructType([
+        # Unwrapped Debezium CDC event schema (after ExtractNewRecordState transform)
+        # The actual data fields + CDC metadata fields prefixed with __
+        unwrapped_schema = StructType([
+            # Customer table fields
             StructField("customer_id", LongType(), True),
             StructField("email", StringType(), True),
             StructField("first_name", StringType(), True),
             StructField("last_name", StringType(), True),
             StructField("phone", StringType(), True),
-            StructField("address_line1", StringType(), True),
+            StructField("address", StringType(), True),
             StructField("city", StringType(), True),
             StructField("state", StringType(), True),
-            StructField("postal_code", StringType(), True),
+            StructField("zip_code", StringType(), True),
             StructField("country", StringType(), True),
-            StructField("registration_date", TimestampType(), True),
-            StructField("last_updated", TimestampType(), True),
-            StructField("is_active", BooleanType(), True),
-            StructField("customer_tier", StringType(), True),
-            StructField("lifetime_value", DoubleType(), True),
+            StructField("created_at", LongType(), True),  # Microseconds since epoch
+            StructField("updated_at", LongType(), True),  # Microseconds since epoch
+            StructField("loyalty_points", LongType(), True),  # For schema evolution tests
+
+            # CDC metadata fields (added by ExtractNewRecordState with add.fields)
+            StructField("__deleted", StringType(), True),
+            StructField("__op", StringType(), True),  # c=create, u=update, d=delete, r=read(snapshot)
+            StructField("__db", StringType(), True),
+            StructField("__table", StringType(), True),
+            StructField("__ts_ms", LongType(), True),
+            StructField("__lsn", LongType(), True),
         ])
 
-        # Source metadata schema
-        source_schema = StructType([
-            StructField("version", StringType(), True),
-            StructField("connector", StringType(), True),
-            StructField("name", StringType(), True),
-            StructField("ts_ms", LongType(), True),
-            StructField("db", StringType(), True),
-            StructField("schema", StringType(), True),
-            StructField("table", StringType(), True),
-            StructField("lsn", LongType(), True),
-        ])
-
-        # Full Debezium envelope
-        debezium_schema = StructType([
-            StructField("before", before_after_schema, True),
-            StructField("after", before_after_schema, True),
-            StructField("source", source_schema, True),
-            StructField("op", StringType(), True),
-            StructField("ts_ms", LongType(), True),
-        ])
-
-        return debezium_schema
+        return unwrapped_schema
 
     def read_from_kafka(self) -> DataFrame:
         """
@@ -185,7 +202,7 @@ class KafkaToIcebergStreamingJob:
 
     def parse_debezium_events(self, df: DataFrame) -> DataFrame:
         """
-        Parse Debezium JSON events.
+        Parse unwrapped Debezium JSON events.
 
         Args:
             df: Raw Kafka DataFrame
@@ -195,7 +212,7 @@ class KafkaToIcebergStreamingJob:
         """
         debezium_schema = self.define_debezium_schema()
 
-        # Parse JSON value
+        # Parse JSON value (already unwrapped by ExtractNewRecordState)
         parsed_df = df.select(
             col("key").cast("string").alias("kafka_key"),
             from_json(col("value").cast("string"), debezium_schema).alias("payload"),
@@ -205,19 +222,17 @@ class KafkaToIcebergStreamingJob:
             col("timestamp").alias("kafka_timestamp")
         )
 
-        # Flatten payload
+        # Flatten payload - since it's already unwrapped, just extract fields directly
         flattened_df = parsed_df.select(
             col("kafka_key"),
-            col("payload.before").alias("before"),
-            col("payload.after").alias("after"),
-            col("payload.source").alias("source"),
-            col("payload.op").alias("operation"),
-            col("payload.ts_ms").alias("event_timestamp_ms"),
+            col("payload.*"),  # Expand all payload fields
             col("topic"),
             col("partition"),
             col("offset"),
             col("kafka_timestamp")
         )
+
+        logger.info(f"Parsed Debezium events. Schema: {flattened_df.schema}")
 
         return flattened_df
 
@@ -232,36 +247,48 @@ class KafkaToIcebergStreamingJob:
         - Add metadata columns
 
         Args:
-            df: Parsed DataFrame
+            df: Parsed DataFrame (unwrapped format)
 
         Returns:
             Transformed DataFrame ready for Iceberg
         """
-        # Skip DELETE operations (retain only active records)
-        df = df.filter(col("operation") != "d")
+        # Check which CDC metadata fields are present
+        has_deleted = "__deleted" in df.columns
+        has_op = "__op" in df.columns
 
-        # Transform from 'after' state
-        transformed_df = df.select(
-            col("after.customer_id").alias("customer_id"),
-            col("after.email").alias("email"),
+        logger.info(f"CDC metadata fields present - __deleted: {has_deleted}, __op: {has_op}")
+
+        # Skip DELETE operations (retain only active records)
+        # Only filter if CDC metadata fields are present
+        if has_deleted and has_op:
+            logger.info("Filtering out DELETE operations using __deleted and __op fields")
+            df = df.filter((col("__deleted") == "false") | (col("__op") != "d"))
+        elif has_op:
+            logger.info("Filtering out DELETE operations using __op field only")
+            df = df.filter(col("__op") != "d")
+        else:
+            logger.warning("No CDC metadata fields found - treating all records as INSERT/UPDATE")
+
+        # Build select columns list dynamically based on available fields
+        select_columns = [
+            col("customer_id"),
+            col("email"),
 
             # Transformation 1: Concatenate name
             concat_ws(" ",
-                col("after.first_name"),
-                col("after.last_name")
+                col("first_name"),
+                col("last_name")
             ).alias("full_name"),
 
             # Transformation 2: Derive location
             concat_ws(", ",
-                col("after.city"),
-                col("after.state"),
-                col("after.country")
+                col("city"),
+                col("state"),
+                col("country")
             ).alias("location"),
 
-            col("after.customer_tier").alias("customer_tier"),
-            col("after.lifetime_value").alias("lifetime_value"),
-            col("after.registration_date").alias("registration_date"),
-            col("after.is_active").alias("is_active"),
+            # Optional fields (may be null for older records)
+            col("loyalty_points"),
 
             # Placeholder for join enrichment
             lit(0).alias("total_orders"),
@@ -269,26 +296,54 @@ class KafkaToIcebergStreamingJob:
             # Metadata columns
             current_timestamp().alias("_ingestion_timestamp"),
             lit("postgres_cdc").alias("_source_system"),
+        ]
 
-            # Map operation
-            expr("""
-                CASE
-                    WHEN operation = 'c' THEN 'INSERT'
-                    WHEN operation = 'u' THEN 'UPDATE'
-                    WHEN operation = 'd' THEN 'DELETE'
-                    WHEN operation = 'r' THEN 'SNAPSHOT'
-                    ELSE 'UNKNOWN'
-                END
-            """).alias("_cdc_operation"),
+        # Add CDC operation field (conditional based on __op availability)
+        if has_op:
+            select_columns.append(
+                expr("""
+                    CASE
+                        WHEN __op = 'c' THEN 'INSERT'
+                        WHEN __op = 'u' THEN 'UPDATE'
+                        WHEN __op = 'd' THEN 'DELETE'
+                        WHEN __op = 'r' THEN 'SNAPSHOT'
+                        ELSE 'UNKNOWN'
+                    END
+                """).alias("_cdc_operation")
+            )
+        else:
+            # Default to INSERT if no operation metadata
+            select_columns.append(lit("INSERT").alias("_cdc_operation"))
 
-            # Pipeline metadata
+        # Pipeline metadata
+        select_columns.extend([
             lit("postgres_to_iceberg").alias("_pipeline_id"),
             current_timestamp().alias("_processed_timestamp"),
+        ])
 
-            # Original CDC metadata
-            col("event_timestamp_ms").alias("_event_timestamp_ms"),
-            col("source.lsn").alias("_source_lsn"),
-            col("kafka_timestamp").alias("_kafka_timestamp"),
+        # Add optional CDC metadata fields if present
+        has_ts_ms = "__ts_ms" in df.columns
+        has_lsn = "__lsn" in df.columns
+
+        if has_ts_ms:
+            select_columns.append(col("__ts_ms").alias("_event_timestamp_ms"))
+        else:
+            select_columns.append(lit(None).cast("long").alias("_event_timestamp_ms"))
+
+        if has_lsn:
+            select_columns.append(col("__lsn").alias("_source_lsn"))
+        else:
+            select_columns.append(lit(None).cast("long").alias("_source_lsn"))
+
+        # Kafka timestamp should always be present
+        select_columns.append(col("kafka_timestamp").alias("_kafka_timestamp"))
+
+        # Transform from unwrapped CDC event fields
+        transformed_df = df.select(*select_columns)
+
+        logger.info(
+            f"Applied transformations. Output schema: {transformed_df.schema}. "
+            f"CDC metadata preserved: op={has_op}, ts_ms={has_ts_ms}, lsn={has_lsn}"
         )
 
         return transformed_df
@@ -298,6 +353,7 @@ class KafkaToIcebergStreamingJob:
         Create Iceberg table if it doesn't exist.
 
         Creates the namespace and table with appropriate schema.
+        Uses CREATE TABLE IF NOT EXISTS to avoid recreating existing tables.
         """
         table_identifier = f"{self.iceberg_catalog}.{self.iceberg_namespace}.{self.iceberg_table}"
 
@@ -308,23 +364,16 @@ class KafkaToIcebergStreamingJob:
         except Exception as e:
             logger.warning(f"Could not create namespace: {e}")
 
-        # Check if table exists
+        # Use CREATE TABLE IF NOT EXISTS instead of checking first
+        # This is atomic and won't recreate if table already exists
         try:
-            self.spark.sql(f"DESC TABLE {table_identifier}")
-            logger.info(f"Table already exists: {table_identifier}")
-        except Exception:
-            # Table doesn't exist, create it
-            logger.info(f"Creating Iceberg table: {table_identifier}")
             create_table_sql = f"""
-                CREATE TABLE {table_identifier} (
+                CREATE TABLE IF NOT EXISTS {table_identifier} (
                     customer_id BIGINT,
                     email STRING,
                     full_name STRING,
                     location STRING,
-                    customer_tier STRING,
-                    lifetime_value DOUBLE,
-                    registration_date TIMESTAMP,
-                    is_active BOOLEAN,
+                    loyalty_points BIGINT,
                     total_orders INT,
                     _ingestion_timestamp TIMESTAMP,
                     _source_system STRING,
@@ -338,7 +387,17 @@ class KafkaToIcebergStreamingJob:
                 USING iceberg
             """
             self.spark.sql(create_table_sql)
-            logger.info(f"Created Iceberg table: {table_identifier}")
+            logger.info(f"Ensured table exists: {table_identifier}")
+
+            # Verify table exists
+            try:
+                table_desc = self.spark.sql(f"DESC TABLE {table_identifier}").collect()
+                logger.info(f"Table {table_identifier} verified with {len(table_desc)} columns")
+            except Exception as e:
+                logger.error(f"Failed to verify table after creation: {e}")
+        except Exception as e:
+            logger.error(f"Failed to create table {table_identifier}: {e}")
+            raise
 
     def write_to_iceberg(self, df: DataFrame) -> None:
         """
@@ -354,6 +413,10 @@ class KafkaToIcebergStreamingJob:
         """
         table_identifier = f"{self.iceberg_catalog}.{self.iceberg_namespace}.{self.iceberg_table}"
 
+        logger.info(f"Starting write to Iceberg table: {table_identifier}")
+        logger.info(f"Trigger interval: {self.trigger_interval}")
+        logger.info(f"Checkpoint location: {self.checkpoint_location}")
+
         query = (
             df.writeStream
             .format("iceberg")
@@ -361,12 +424,13 @@ class KafkaToIcebergStreamingJob:
             .option("checkpointLocation", self.checkpoint_location)
             .option("path", table_identifier)
             .option("fanout-enabled", "true")
-            .trigger(processingTime="10 seconds")
+            .trigger(processingTime=self.trigger_interval)
             .start()
         )
 
-        logger.info(f"Started streaming to Iceberg table: {table_identifier}")
-        logger.info(f"Checkpoint location: {self.checkpoint_location}")
+        logger.info(f"Streaming query started successfully for table: {table_identifier}")
+        logger.info(f"Query ID: {query.id}")
+        logger.info(f"Query name: {query.name}")
 
         # Wait for termination (blocking)
         query.awaitTermination()
@@ -409,11 +473,12 @@ def main():
     # Configuration from environment or defaults
     kafka_bootstrap_servers = os.getenv("KAFKA_BOOTSTRAP_SERVERS", "localhost:9092")
     kafka_topic = os.getenv("KAFKA_TOPIC", "debezium.public.customers")
-    iceberg_catalog = os.getenv("ICEBERG_CATALOG", "iceberg")
-    iceberg_warehouse = os.getenv("ICEBERG_WAREHOUSE", "/tmp/iceberg-warehouse")
-    iceberg_namespace = os.getenv("ICEBERG_NAMESPACE", "analytics")
-    iceberg_table = os.getenv("ICEBERG_TABLE", "customers_analytics")
+    iceberg_catalog = os.getenv("ICEBERG_CATALOG", "demo_catalog")
+    iceberg_warehouse = os.getenv("ICEBERG_WAREHOUSE", "s3a://warehouse/iceberg")
+    iceberg_namespace = os.getenv("ICEBERG_NAMESPACE", "cdc")
+    iceberg_table = os.getenv("ICEBERG_TABLE", "customers")
     checkpoint_location = os.getenv("CHECKPOINT_LOCATION", "/tmp/spark-checkpoints/kafka-to-iceberg")
+    trigger_interval = os.getenv("SPARK_TRIGGER_INTERVAL", "10 seconds")
 
     # Allow command-line override
     if len(sys.argv) > 1:
@@ -432,6 +497,7 @@ def main():
     logger.info(f"  Iceberg Namespace: {iceberg_namespace}")
     logger.info(f"  Iceberg Table: {iceberg_table}")
     logger.info(f"  Checkpoint Location: {checkpoint_location}")
+    logger.info(f"  Trigger Interval: {trigger_interval}")
     logger.info("=" * 80)
 
     # Create and run job
@@ -443,6 +509,7 @@ def main():
         iceberg_namespace=iceberg_namespace,
         iceberg_table=iceberg_table,
         checkpoint_location=checkpoint_location,
+        trigger_interval=trigger_interval,
     )
 
     job.run()
