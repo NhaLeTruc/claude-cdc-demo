@@ -144,6 +144,11 @@ class PostgresCDCPipeline:
 
             for record in records:
                 try:
+                    # Skip tombstone records (None values from DELETE operations)
+                    if record.value is None:
+                        logger.debug("Skipping tombstone record")
+                        continue
+
                     # Parse Debezium event
                     parsed_event = self.event_parser.parse(record.value)
                     events_batch.append(parsed_event)
@@ -166,11 +171,34 @@ class PostgresCDCPipeline:
             except Exception as e:
                 logger.error(f"Failed to write batch: {e}", exc_info=True)
 
-    def _deserialize_json(self, message: bytes) -> Dict[str, Any]:
-        """Deserialize JSON message."""
+    def _deserialize_json(self, message: Optional[bytes]) -> Optional[Dict[str, Any]]:
+        """
+        Deserialize JSON message from Kafka.
+
+        Handles tombstone records (None values) which are sent for DELETE operations.
+
+        Args:
+            message: Raw message bytes (can be None for tombstone records)
+
+        Returns:
+            Deserialized dictionary, or None for tombstone records
+        """
         import json
 
-        return json.loads(message.decode("utf-8"))
+        try:
+            if message is None:
+                # Tombstone record (DELETE operation)
+                return None
+
+            return json.loads(message.decode("utf-8"))
+        except json.JSONDecodeError as e:
+            logger.error(f"Failed to deserialize JSON: {e}")
+            logger.debug(f"Message bytes (first 100): {message[:100] if message else None}")
+            return {}
+        except (AttributeError, UnicodeDecodeError) as e:
+            logger.error(f"Failed to decode message: {e}")
+            logger.debug(f"Message bytes (first 100): {message[:100] if message else None}")
+            return {}
 
     def get_status(self) -> Dict[str, Any]:
         """
