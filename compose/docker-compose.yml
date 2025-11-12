@@ -13,6 +13,7 @@ include:
   # Streaming infrastructure
   - compose/streaming/kafka.yml
   - compose/streaming/schema-registry.yml
+  - compose/streaming/spark-streaming.yml
 
   # CDC components
   - compose/cdc/debezium.yml

@@ -1,0 +1,55 @@
+services:
+  spark-streaming:
+    build:
+      context: ../../docker/spark-streaming
+      dockerfile: Dockerfile
+    image: cdc-spark-streaming:latest
+    container_name: cdc-spark-streaming
+    environment:
+      # Kafka Configuration
+      - KAFKA_BOOTSTRAP_SERVERS=kafka:9092
+      - KAFKA_TOPIC=debezium.public.customers
+
+      # Iceberg Configuration
+      - ICEBERG_CATALOG=demo_catalog
+      - ICEBERG_WAREHOUSE=s3a://warehouse/iceberg
+      - ICEBERG_NAMESPACE=cdc
+      - ICEBERG_TABLE=customers
+      - CHECKPOINT_LOCATION=/tmp/spark-checkpoints/kafka-to-iceberg
+
+      # S3/MinIO Configuration
+      - S3_ENDPOINT=http://minio:9000
+      - S3_ACCESS_KEY=minioadmin
+      - S3_SECRET_KEY=minioadmin
+
+      # Spark Configuration
+      - SPARK_MASTER=local[*]
+      - SPARK_DRIVER_MEMORY=1g
+      - SPARK_EXECUTOR_MEMORY=1g
+
+      # Streaming Configuration
+      # Set to 5 seconds for faster processing in test/dev environments
+      # Production should use 10-30 seconds for efficiency
+      - SPARK_TRIGGER_INTERVAL=5 seconds
+    volumes:
+      # Mount the streaming job code
+      - ../../src/cdc_pipelines/streaming:/opt/spark-jobs
+    depends_on:
+      kafka:
+        condition: service_healthy
+      minio:
+        condition: service_healthy
+    networks:
+      - cdc-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "pgrep", "-f", "kafka_to_iceberg"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 120s
+    deploy:
+      resources:
+        limits:
+          memory: 2g
+          cpus: '2.0'
