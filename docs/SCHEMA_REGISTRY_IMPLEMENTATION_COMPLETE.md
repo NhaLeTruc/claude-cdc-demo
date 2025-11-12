@@ -142,7 +142,7 @@ After tests run:
 curl http://localhost:8081/subjects
 
 # View specific schema (example)
-curl http://localhost:8081/subjects/debezium.public.schema_evo_test-value/versions/latest
+curl http://localhost:8081/subjects/debezium.public.schema_evolution_test-value/versions/latest
 ```
 
 ## Configuration Details
