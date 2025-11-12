@@ -26,6 +26,10 @@ class BinlogEventParser:
         """
         Parse Debezium CDC event into standard format.
 
+        Supports both:
+        - Full envelope format (with 'op', 'before', 'after', 'source')
+        - Flattened format (with '__op', '__ts_ms', etc. from ExtractNewRecordState)
+
         Args:
             debezium_event: Raw Debezium event from Kafka
 
@@ -35,48 +39,83 @@ class BinlogEventParser:
         Raises:
             ValueError: If event is invalid or missing required fields
         """
-        if not debezium_event or "op" not in debezium_event:
-            raise ValueError("Invalid Debezium event: missing 'op' field")
+        if not debezium_event:
+            raise ValueError("Invalid Debezium event: empty event")
 
-        if "source" not in debezium_event:
-            raise ValueError("Invalid Debezium event: missing 'source' field")
+        # Check if this is a flattened event (with __ prefix) or full envelope
+        is_flattened = "__op" in debezium_event
 
-        operation = self._parse_operation(debezium_event["op"])
-        source = debezium_event.get("source", {})
+        if is_flattened:
+            # Flattened format from ExtractNewRecordState transformation
+            if "__op" not in debezium_event:
+                raise ValueError("Invalid Debezium event: missing '__op' field in flattened format")
 
-        # Extract data based on operation type
-        if operation == "INSERT" or operation == "READ":
-            data = debezium_event.get("after", {})
-            before = None
-        elif operation == "UPDATE":
-            data = debezium_event.get("after", {})
-            before = debezium_event.get("before", {})
-        elif operation == "DELETE":
-            data = debezium_event.get("before", {})
-            before = debezium_event.get("before", {})
+            operation = self._parse_operation(debezium_event["__op"])
+
+            # In flattened format, all business data fields are at the top level
+            # Extract business data by filtering out CDC metadata fields
+            data = {k: v for k, v in debezium_event.items() if not k.startswith("__")}
+            before = None  # Flattened format doesn't include before state
+
+            # Build standardized event
+            event: Dict[str, Any] = {
+                "operation": operation,
+                "table": debezium_event.get("__table", "unknown"),
+                "data": data,
+                "timestamp": self._parse_timestamp(debezium_event.get("__ts_ms")),
+                "metadata": {
+                    "database": debezium_event.get("__db"),
+                    "binlog_file": None,  # Not available in flattened format
+                    "binlog_position": None,
+                    "server_id": None,
+                    "gtid": None,
+                    "thread": None,
+                },
+            }
         else:
-            data = {}
-            before = None
+            # Full envelope format
+            if "op" not in debezium_event:
+                raise ValueError("Invalid Debezium event: missing 'op' field")
 
-        # Build standardized event
-        event: Dict[str, Any] = {
-            "operation": operation,
-            "table": source.get("table", "unknown"),
-            "data": data,
-            "timestamp": self._parse_timestamp(source.get("ts_ms")),
-            "metadata": {
-                "database": source.get("db"),
-                "binlog_file": source.get("file"),
-                "binlog_position": source.get("pos"),
-                "server_id": source.get("server_id"),
-                "gtid": source.get("gtid"),
-                "thread": source.get("thread"),
-            },
-        }
+            if "source" not in debezium_event:
+                raise ValueError("Invalid Debezium event: missing 'source' field")
 
-        # Add before state for updates
-        if before is not None:
-            event["before"] = before
+            operation = self._parse_operation(debezium_event["op"])
+            source = debezium_event.get("source", {})
+
+            # Extract data based on operation type
+            if operation == "INSERT" or operation == "READ":
+                data = debezium_event.get("after", {})
+                before = None
+            elif operation == "UPDATE":
+                data = debezium_event.get("after", {})
+                before = debezium_event.get("before", {})
+            elif operation == "DELETE":
+                data = debezium_event.get("before", {})
+                before = debezium_event.get("before", {})
+            else:
+                data = {}
+                before = None
+
+            # Build standardized event
+            event: Dict[str, Any] = {
+                "operation": operation,
+                "table": source.get("table", "unknown"),
+                "data": data,
+                "timestamp": self._parse_timestamp(source.get("ts_ms")),
+                "metadata": {
+                    "database": source.get("db"),
+                    "binlog_file": source.get("file"),
+                    "binlog_position": source.get("pos"),
+                    "server_id": source.get("server_id"),
+                    "gtid": source.get("gtid"),
+                    "thread": source.get("thread"),
+                },
+            }
+
+            # Add before state for updates
+            if before is not None:
+                event["before"] = before
 
         return event
 
