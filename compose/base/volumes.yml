@@ -25,3 +25,7 @@ volumes:
     name: cdc-iceberg-warehouse
   spark_checkpoints:
     name: cdc-spark-checkpoints
+  delta-data:
+    name: cdc-delta-data
+  delta-checkpoints:
+    name: cdc-delta-checkpoints

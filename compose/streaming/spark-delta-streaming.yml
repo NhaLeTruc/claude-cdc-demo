@@ -1,0 +1,52 @@
+services:
+  spark-delta-streaming:
+    build:
+      context: ../../docker/spark-streaming
+      dockerfile: Dockerfile
+    image: cdc-spark-streaming:latest
+    container_name: cdc-spark-delta-streaming
+    environment:
+      # Kafka Configuration
+      - KAFKA_BOOTSTRAP_SERVERS=kafka:9092
+      - KAFKA_TOPIC=debezium.public.customers
+
+      # Delta Lake Configuration
+      - DELTA_TABLE_PATH=/opt/delta-lake/customers
+      - CHECKPOINT_LOCATION=/opt/spark-checkpoints/kafka-to-delta
+
+      # Spark Configuration
+      - SPARK_MASTER=local[*]
+      - SPARK_DRIVER_MEMORY=1g
+      - SPARK_EXECUTOR_MEMORY=1g
+
+      # Streaming Configuration
+      # Set to 10 seconds for test/dev environments
+      # Production should use 30-60 seconds for efficiency
+      - SPARK_TRIGGER_INTERVAL=10 seconds
+    volumes:
+      # Mount Delta Lake data directory
+      - delta-data:/opt/delta-lake
+      # Mount checkpoint directory
+      - delta-checkpoints:/opt/spark-checkpoints
+      # Mount the streaming job code
+      - ../../src/cdc_pipelines/streaming:/opt/spark-jobs
+    command: ["python", "-m", "kafka_to_delta"]
+    depends_on:
+      kafka:
+        condition: service_healthy
+      debezium:
+        condition: service_started
+    networks:
+      - cdc-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "pgrep", "-f", "kafka_to_delta"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 120s
+    deploy:
+      resources:
+        limits:
+          memory: 2g
+          cpus: '2.0'
