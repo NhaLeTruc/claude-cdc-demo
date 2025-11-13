@@ -27,8 +27,23 @@ class TestPostgresToDeltaLakePipeline:
 
     @pytest.fixture(scope="class")
     def delta_table_path(self):
-        """Delta Lake table path where streaming job writes."""
-        return os.getenv("DELTA_TABLE_PATH", "/tmp/delta-cdc/customers")
+        """Delta Lake table path where streaming job writes.
+
+        Supports both local execution and Docker-based streaming:
+        - Local: /tmp/delta/customers (orchestrate_streaming_pipelines.sh)
+        - Docker: /opt/delta-lake/customers (via volume mount)
+
+        Tests check both paths and use the one that exists.
+        """
+        # Primary path (from .env)
+        path = os.getenv("DELTA_TABLE_PATH", "/tmp/delta/customers")
+
+        # Check if Docker volume is mounted locally for testing
+        docker_path = "/opt/delta-lake/customers"
+        if Path(docker_path).exists() and not Path(path).exists():
+            return docker_path
+
+        return path
 
     @pytest.fixture(scope="class")
     def spark_session(self):

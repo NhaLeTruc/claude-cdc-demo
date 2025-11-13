@@ -170,13 +170,3 @@ class TestPostgresCDCPipeline:
         )
         assert result[0]['phone'] is None
         assert result[0]['address'] is None
-
-    @pytest.mark.skipif(
-        not is_debezium_connector_running(),
-        reason="Requires full CDC pipeline setup with Debezium running"
-    )
-    def test_end_to_end_postgres_to_delta(self):
-        """Test complete Postgres→DeltaLake pipeline."""
-        # This would test the full pipeline end-to-end
-        # Including Kafka, Debezium, and DeltaLake write
-        pass
