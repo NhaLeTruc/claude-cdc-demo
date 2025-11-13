@@ -294,13 +294,25 @@ def clean_cdc_state():
         except Exception as e:
             print(f"\n⚠ Error clearing Postgres: {e}")
 
-        # Step 2: Skip Iceberg table cleanup
+        # Step 2: Clean Delta Lake table
+        try:
+            delta_path = os.getenv("DELTA_TABLE_PATH", "/tmp/delta/customers")
+            delta_path_obj = Path(delta_path)
+            if delta_path_obj.exists():
+                shutil.rmtree(delta_path, ignore_errors=True)
+                print(f"✓ Cleared Delta Lake table at {delta_path}")
+            else:
+                print(f"✓ Delta Lake table path {delta_path} doesn't exist yet")
+        except Exception as e:
+            print(f"⚠ Error clearing Delta Lake: {e}")
+
+        # Step 3: Skip Iceberg table cleanup
         # NOTE: We don't delete the Iceberg table to preserve its metadata across test runs.
         # The Spark job uses CREATE TABLE IF NOT EXISTS, which will reuse existing table.
         # Postgres TRUNCATE will reset customer_id sequence, so tests won't interfere.
         print("✓ Skipping Iceberg table cleanup (table structure preserved)")
 
-        # Step 3: Delete Kafka topics AND Kafka Connect offsets to remove CDC state
+        # Step 4: Delete Kafka topics AND Kafka Connect offsets to remove CDC state
         try:
             # First delete the topics
             for topic in ["debezium.public.customers", "debezium.public.schema_evolution_test"]:
@@ -385,7 +397,7 @@ def clean_cdc_state():
         except Exception as e:
             print(f"⚠ Error managing Kafka topics: {e}")
 
-        # Step 4: Reset Spark checkpoint and restart
+        # Step 5: Reset Spark checkpoint and restart
         try:
             subprocess.run(
                 ["docker", "exec", "cdc-spark-streaming",
