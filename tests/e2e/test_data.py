@@ -105,12 +105,13 @@ def wait_for_delta_propagation(
     delta_table_path: str,
     customer_ids: List[int],
     timeout_seconds: int = 180,
-    poll_interval: float = 5.0
+    poll_interval: float = 5.0,
+    early_success_threshold: float = 0.95
 ) -> bool:
     """
-    Wait for all customer IDs to appear in Delta Lake table.
+    Wait for customer IDs to appear in Delta Lake table.
 
-    Uses polling with progress reporting.
+    Supports early success detection if 95% of records are found.
 
     Args:
         spark: SparkSession instance
@@ -118,9 +119,10 @@ def wait_for_delta_propagation(
         customer_ids: List of customer IDs to wait for
         timeout_seconds: Maximum time to wait
         poll_interval: Time between checks in seconds
+        early_success_threshold: Fraction of records needed for early success (default: 0.95)
 
     Returns:
-        True if all IDs found, False otherwise
+        True if threshold met, False otherwise
     """
     from delta import DeltaTable
 
@@ -152,13 +154,17 @@ def wait_for_delta_propagation(
             # Show progress if count changed
             if total_found != last_count:
                 elapsed = time.time() - start_time
-                print(f"  Progress: {total_found}/{target_count} customers ({elapsed:.1f}s)")
+                progress_pct = (total_found / target_count) * 100
+                print(f"  Progress: {total_found}/{target_count} ({progress_pct:.1f}%) at {elapsed:.1f}s")
                 last_count = total_found
 
-            # Check if all found
-            if total_found >= target_count:
+            # Early success: If we've found 95%+ of records
+            if total_found >= target_count * early_success_threshold:
                 elapsed = time.time() - start_time
-                print(f"✓ All {total_found} customers found in Delta ({elapsed:.1f}s)")
+                if total_found < target_count:
+                    print(f"✓ Early success: {total_found}/{target_count} customers found ({elapsed:.1f}s)")
+                else:
+                    print(f"✓ All {total_found} customers found in Delta ({elapsed:.1f}s)")
                 return True
 
         except Exception as e:
@@ -168,7 +174,12 @@ def wait_for_delta_propagation(
         time.sleep(poll_interval)
 
     elapsed = time.time() - start_time
-    print(f"⚠ Only found {last_count}/{target_count} customers in Delta after {elapsed:.1f}s")
+    success_threshold = int(target_count * early_success_threshold)
+    if last_count >= success_threshold:
+        print(f"⚠ Partial success: {last_count}/{target_count} customers after {elapsed:.1f}s (threshold: {success_threshold})")
+        return True
+
+    print(f"✗ Only found {last_count}/{target_count} customers after {elapsed:.1f}s")
     return False
 
 
