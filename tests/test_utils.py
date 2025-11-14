@@ -80,16 +80,20 @@ def wait_for_condition(
     condition_func: Callable[[], bool],
     timeout_seconds: int = 60,
     poll_interval: float = 2.0,
-    error_message: str = "Condition not met within timeout"
+    error_message: str = "Condition not met within timeout",
+    adaptive: bool = True,
+    max_poll_interval: float = 10.0
 ) -> bool:
     """
-    Wait for a condition to become true with timeout and polling.
+    Wait for a condition to become true with timeout and adaptive polling.
 
     Args:
         condition_func: Function that returns True when condition is met
         timeout_seconds: Maximum time to wait in seconds (default: 60)
-        poll_interval: Time between checks in seconds (default: 2.0)
+        poll_interval: Initial time between checks in seconds (default: 2.0)
         error_message: Error message if timeout occurs
+        adaptive: Use exponential backoff for polling (default: True)
+        max_poll_interval: Maximum poll interval when using adaptive mode
 
     Returns:
         True if condition was met
@@ -99,25 +103,41 @@ def wait_for_condition(
     """
     start_time = time.time()
     last_exception = None
+    current_poll_interval = poll_interval
+    attempts = 0
 
     while time.time() - start_time < timeout_seconds:
         try:
             if condition_func():
+                elapsed = time.time() - start_time
+                if attempts > 0:
+                    print(f"  Condition met after {elapsed:.1f}s ({attempts} attempts)")
                 return True
         except Exception as e:
             # Store exception but continue polling
             last_exception = e
 
-        time.sleep(poll_interval)
+        attempts += 1
+        time.sleep(current_poll_interval)
+
+        # Adaptive backoff: start fast, slow down as we wait longer
+        if adaptive and attempts > 3:
+            current_poll_interval = min(
+                current_poll_interval * 1.5,  # Increase by 50%
+                max_poll_interval
+            )
 
     # Timeout occurred
+    elapsed = time.time() - start_time
     if last_exception:
         raise TimeoutError(
-            f"{error_message} (timeout: {timeout_seconds}s). "
+            f"{error_message} (timeout: {timeout_seconds}s, elapsed: {elapsed:.1f}s). "
             f"Last exception: {type(last_exception).__name__}: {last_exception}"
         )
     else:
-        raise TimeoutError(f"{error_message} (timeout: {timeout_seconds}s)")
+        raise TimeoutError(
+            f"{error_message} (timeout: {timeout_seconds}s, elapsed: {elapsed:.1f}s, {attempts} attempts)"
+        )
 
 
 def ensure_delta_table_exists(spark, table_path: str, timeout_seconds: int = 60) -> bool:
