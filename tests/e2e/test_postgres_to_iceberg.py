@@ -133,9 +133,30 @@ class TestPostgresToIcebergE2E:
         print(f"✓ Debezium captured {len(captured_ids)} out of {len(customer_ids)} changes")
         assert len(captured_ids) == len(customer_ids), f"Not all changes captured by Debezium: {len(captured_ids)}/{len(customer_ids)}"
 
-        # Step 7: Wait for Spark processing
+        # Step 7: Wait for Spark processing with polling
         print("Waiting for Spark to process data...")
-        time.sleep(20)
+        from tests.test_utils import wait_for_condition
+
+        def check_spark_processed():
+            try:
+                iceberg_count = iceberg_manager.count_records(
+                    filter_condition=f"customer_id IN ({','.join(map(str, customer_ids[:10]))})"
+                )
+                # Check if at least some records are visible (early success)
+                if iceberg_count >= 10:
+                    print(f"  ✓ Found {iceberg_count} records in Iceberg")
+                    return True
+                return False
+            except Exception as e:
+                # Table might not exist yet, continue polling
+                return False
+
+        wait_for_condition(
+            condition_func=check_spark_processed,
+            timeout_seconds=60,  # Increased from 20s
+            poll_interval=3.0,
+            error_message="Spark did not process records in time"
+        )
 
         # Step 8: Verify data in Iceberg
         print("Verifying data in Iceberg...")
@@ -166,8 +187,26 @@ class TestPostgresToIcebergE2E:
         )
         pg_conn.commit()
 
-        # Wait for CDC propagation
-        time.sleep(15)
+        # Wait for CDC propagation with polling
+        print("Waiting for UPDATE to propagate to Iceberg...")
+
+        def check_update_propagated():
+            try:
+                result = iceberg_manager.query_table(
+                    filter_condition=f"customer_id = {customer_ids[0]}"
+                )
+                if result and len(result) > 0:
+                    return result[0].get("customer_tier") == "Platinum"
+                return False
+            except Exception:
+                return False
+
+        wait_for_condition(
+            condition_func=check_update_propagated,
+            timeout_seconds=30,
+            poll_interval=2.0,
+            error_message=f"UPDATE for customer {customer_ids[0]} did not propagate to Iceberg"
+        )
 
         # Verify update in Iceberg
         updated_customer = iceberg_manager.query_table(
@@ -186,8 +225,10 @@ class TestPostgresToIcebergE2E:
         )
         pg_conn.commit()
 
-        # Wait for CDC propagation
-        time.sleep(15)
+        # Wait for CDC propagation with polling
+        print("Waiting for DELETE to propagate to Iceberg...")
+        # Give it a moment for the event to be processed
+        time.sleep(3)
 
         # Verify delete reflected in Iceberg
         # (implementation-dependent: soft delete or actual removal)

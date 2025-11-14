@@ -68,7 +68,8 @@ class TestIcebergCDCWorkflow:
         assert snapshot_1 is not None
 
         # Step 3: Simulate updates (Snapshot 2)
-        time.sleep(1)
+        # Brief pause to ensure snapshots have different timestamps
+        time.sleep(0.1)
 
         updates = [
             {
@@ -87,7 +88,8 @@ class TestIcebergCDCWorkflow:
         assert snapshot_2.snapshot_id != snapshot_1.snapshot_id
 
         # Step 4: Add new records (Snapshot 3)
-        time.sleep(1)
+        # Brief pause to ensure snapshots have different timestamps
+        time.sleep(0.1)
 
         new_records = [
             {
@@ -105,7 +107,8 @@ class TestIcebergCDCWorkflow:
         snapshot_3 = tracker.get_current_snapshot()
 
         # Step 5: Delete some records (Snapshot 4)
-        time.sleep(1)
+        # Brief pause to ensure snapshots have different timestamps
+        time.sleep(0.1)
 
         table_manager.delete_data(filter_condition="customer_id < 50")
 
@@ -278,9 +281,9 @@ class TestIcebergCDCWorkflow:
         ]
 
         table_manager.write_data(january_data)
-        time.sleep(1)
+        time.sleep(0.1)  # Brief pause to ensure snapshots have different timestamps
         table_manager.append_data(february_data)
-        time.sleep(1)
+        time.sleep(0.1)  # Brief pause to ensure snapshots have different timestamps
         table_manager.append_data(march_data)
 
         # Get actual snapshot IDs
