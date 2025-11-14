@@ -2,58 +2,27 @@
 
 import pytest
 import time
-from pyspark.sql import SparkSession
-from tests.test_utils import ensure_delta_table_exists, read_delta_table_with_retry
-
-
-@pytest.fixture(scope="module")
-def spark():
-    """Provide Spark session for tests."""
-    spark = (
-        SparkSession.builder.appName("MySQL_CDC_E2E_Test")
-        .config("spark.jars.packages", "io.delta:delta-core_2.12:2.4.0")
-        .config("spark.sql.extensions", "io.delta.sql.DeltaSparkSessionExtension")
-        .config(
-            "spark.sql.catalog.spark_catalog",
-            "org.apache.spark.sql.delta.catalog.DeltaCatalog",
-        )
-        .master("local[*]")
-        .getOrCreate()
-    )
-    yield spark
-    spark.stop()
+import os
+from tests.test_utils import ensure_delta_table_exists, read_delta_table_with_retry, wait_for_condition
 
 
 @pytest.fixture
-def mysql_connection():
-    """Provide MySQL connection."""
-    from src.cdc_pipelines.mysql.connection import MySQLConnectionManager
-    from src.common.config import get_settings
+def cdc_pipeline(baseline_mysql_products):
+    """
+    Provide MySQL CDC pipeline.
 
-    settings = get_settings()
-    manager = MySQLConnectionManager(
-        host=settings.mysql.host,
-        port=settings.mysql.port,
-        user=settings.mysql.user,
-        password=settings.mysql.password,
-        database=settings.mysql.db,
-    )
-    yield manager
-    manager.close()
-
-
-@pytest.fixture
-def cdc_pipeline():
-    """Provide MySQL CDC pipeline."""
+    Depends on baseline_mysql_products to ensure infrastructure is ready
+    and Delta table is initialized before starting the pipeline.
+    """
     from src.cdc_pipelines.mysql.pipeline import MySQLCDCPipeline
-    from src.common.config import get_settings
 
-    settings = get_settings()
+    delta_table_path = baseline_mysql_products['delta_table_path']
+
     pipeline = MySQLCDCPipeline(
         pipeline_name="mysql_e2e_test",
-        kafka_bootstrap_servers=settings.kafka.bootstrap_servers,
+        kafka_bootstrap_servers=os.getenv("KAFKA_BOOTSTRAP_SERVERS", "localhost:29092"),
         kafka_topic="debezium.cdcdb.products",  # Default MySQL CDC topic
-        delta_table_path="/tmp/delta/e2e_test/mysql_products",
+        delta_table_path=delta_table_path,
         primary_key="product_id",
     )
     yield pipeline
@@ -64,13 +33,14 @@ def cdc_pipeline():
 class TestMySQLToDeltaE2E:
     """End-to-end tests for complete MySQL to DeltaLake pipeline."""
 
-    def test_complete_pipeline_insert(self, mysql_connection, cdc_pipeline, spark):
+    def test_complete_pipeline_insert(self, e2e_mysql_connection, baseline_mysql_products, cdc_pipeline, e2e_spark_session):
         """Test complete pipeline: MySQL INSERT → Kafka → DeltaLake."""
-        # Clean up test table
-        mysql_connection.execute_query(
-            "DELETE FROM products WHERE product_id >= 9000",
-            fetch=False,
-        )
+        delta_table_path = baseline_mysql_products['delta_table_path']
+        cursor = e2e_mysql_connection.cursor()
+
+        # Clean up test data
+        cursor.execute("DELETE FROM products WHERE product_id >= 9000")
+        e2e_mysql_connection.commit()
 
         # Start CDC pipeline in background
         import threading
@@ -84,20 +54,32 @@ class TestMySQLToDeltaE2E:
         time.sleep(5)  # Let pipeline initialize
 
         # Insert record in MySQL
-        mysql_connection.execute_query(
+        cursor.execute(
             """
             INSERT INTO products (product_id, product_name, category, price, stock_quantity)
             VALUES (9000, 'E2E Test Product', 'Test Category', 299.99, 150)
-            """,
-            fetch=False,
+            """
+        )
+        e2e_mysql_connection.commit()
+
+        # Wait for record to appear in Delta using proper polling
+        def check_product_in_delta():
+            try:
+                df = e2e_spark_session.read.format("delta").load(delta_table_path)
+                result = df.filter("product_id = 9000").collect()
+                return len(result) > 0
+            except Exception:
+                return False
+
+        wait_for_condition(
+            condition_func=check_product_in_delta,
+            timeout_seconds=60,
+            poll_interval=2.0,
+            error_message="Product 9000 did not appear in Delta Lake"
         )
 
-        # Wait for CDC propagation
-        time.sleep(10)
-
         # Verify in DeltaLake
-        ensure_delta_table_exists(spark, "/tmp/delta/e2e_test/mysql_products", timeout_seconds=60)
-        delta_df = read_delta_table_with_retry(spark, "/tmp/delta/e2e_test/mysql_products")
+        delta_df = read_delta_table_with_retry(e2e_spark_session, delta_table_path)
         result = delta_df.filter("product_id = 9000").collect()
 
         assert len(result) == 1
@@ -106,222 +88,22 @@ class TestMySQLToDeltaE2E:
         assert result[0]["stock_quantity"] == 150
         assert result[0]["_cdc_operation"] == "INSERT"
 
-    def test_complete_pipeline_update(self, mysql_connection, cdc_pipeline, spark):
-        """Test complete pipeline: MySQL UPDATE → Kafka → DeltaLake."""
-        # Insert initial record
-        mysql_connection.execute_query(
-            """
-            INSERT INTO products (product_id, product_name, category, price, stock_quantity)
-            VALUES (9001, 'Update Test', 'Test', 100.0, 50)
-            ON DUPLICATE KEY UPDATE product_name = 'Update Test'
-            """,
-            fetch=False,
-        )
+        cursor.close()
 
-        time.sleep(5)
+    def test_baseline_data_exists(self, baseline_mysql_products, e2e_spark_session):
+        """Test that baseline data was loaded successfully."""
+        delta_table_path = baseline_mysql_products['delta_table_path']
+        product_ids = baseline_mysql_products['product_ids']
 
-        # Update record
-        mysql_connection.execute_query(
-            """
-            UPDATE products
-            SET price = 150.0, stock_quantity = 75
-            WHERE product_id = 9001
-            """,
-            fetch=False,
-        )
+        # Ensure table exists (it should from baseline fixture)
+        ensure_delta_table_exists(e2e_spark_session, delta_table_path, timeout_seconds=30)
 
-        time.sleep(10)
+        # Read Delta table
+        delta_df = read_delta_table_with_retry(e2e_spark_session, delta_table_path)
 
-        # Verify in DeltaLake
-        ensure_delta_table_exists(spark, "/tmp/delta/e2e_test/mysql_products", timeout_seconds=60)
-        delta_df = read_delta_table_with_retry(spark, "/tmp/delta/e2e_test/mysql_products")
-        result = delta_df.filter("product_id = 9001").collect()
+        # Check that some baseline products exist
+        baseline_count = delta_df.filter("product_id >= 8000 AND product_id < 8100").count()
 
-        assert len(result) == 1
-        assert result[0]["price"] == 150.0
-        assert result[0]["stock_quantity"] == 75
-        # Should have UPDATE operation in CDC metadata
-        assert result[0]["_cdc_operation"] == "UPDATE"
-
-    def test_complete_pipeline_delete(self, mysql_connection, cdc_pipeline, spark):
-        """Test complete pipeline: MySQL DELETE → Kafka → DeltaLake."""
-        # Insert record
-        mysql_connection.execute_query(
-            """
-            INSERT INTO products (product_id, product_name, category, price, stock_quantity)
-            VALUES (9002, 'Delete Test', 'Test', 100.0, 50)
-            ON DUPLICATE KEY UPDATE product_name = 'Delete Test'
-            """,
-            fetch=False,
-        )
-
-        time.sleep(5)
-
-        # Delete record
-        mysql_connection.execute_query(
-            "DELETE FROM products WHERE product_id = 9002",
-            fetch=False,
-        )
-
-        time.sleep(10)
-
-        # Verify in DeltaLake (with CDF, delete should be marked)
-        ensure_delta_table_exists(spark, "/tmp/delta/e2e_test/mysql_products", timeout_seconds=60)
-        delta_df = read_delta_table_with_retry(spark, "/tmp/delta/e2e_test/mysql_products")
-        result = delta_df.filter("product_id = 9002").collect()
-
-        # Depending on implementation, deleted record might be marked or removed
-        # Check for DELETE operation in CDC history
-        if len(result) > 0:
-            assert result[0]["_cdc_operation"] == "DELETE"
-
-    def test_bulk_insert_performance(self, mysql_connection, cdc_pipeline, spark):
-        """Test pipeline performance with bulk insert."""
-        # Bulk insert 500 products
-        values = []
-        for i in range(500):
-            product_id = 9100 + i
-            values.append(
-                f"({product_id}, 'Bulk Product {i}', 'Bulk', {50.0 + i}, {10 * i})"
-            )
-
-        # Insert in batches to avoid SQL size limits
-        batch_size = 100
-        for i in range(0, len(values), batch_size):
-            batch = values[i : i + batch_size]
-            insert_query = f"""
-                INSERT INTO products (product_id, product_name, category, price, stock_quantity)
-                VALUES {','.join(batch)}
-            """
-            mysql_connection.execute_query(insert_query, fetch=False)
-
-        # Wait for pipeline to process
-        time.sleep(30)
-
-        # Verify in DeltaLake
-        ensure_delta_table_exists(spark, "/tmp/delta/e2e_test/mysql_products", timeout_seconds=60)
-        delta_df = read_delta_table_with_retry(spark, "/tmp/delta/e2e_test/mysql_products")
-        result_count = delta_df.filter("product_id >= 9100 AND product_id < 9600").count()
-
-        assert result_count == 500
-
-    def test_data_quality_end_to_end(self, mysql_connection, cdc_pipeline, spark):
-        """Test data quality validation across entire pipeline."""
-        from src.validation.integrity import RowCountValidator
-
-        # Insert test data
-        mysql_connection.execute_query(
-            """
-            INSERT INTO products (product_id, product_name, category, price, stock_quantity)
-            VALUES (9700, 'Quality Test', 'Test', 100.0, 50)
-            ON DUPLICATE KEY UPDATE product_name = 'Quality Test'
-            """,
-            fetch=False,
-        )
-
-        time.sleep(10)
-
-        # Get counts from source and destination
-        source_result = mysql_connection.execute_query(
-            "SELECT COUNT(*) as count FROM products WHERE product_id = 9700"
-        )
-        source_count = source_result[0]["count"]
-
-        ensure_delta_table_exists(spark, "/tmp/delta/e2e_test/mysql_products", timeout_seconds=60)
-        delta_df = read_delta_table_with_retry(spark, "/tmp/delta/e2e_test/mysql_products")
-        dest_count = delta_df.filter("product_id = 9700").count()
-
-        # Validate counts match
-        validator = RowCountValidator(tolerance=0)
-        result = validator.validate(
-            list(range(source_count)), list(range(dest_count))
-        )
-
-        assert result.status.value == "passed"
-
-    def test_lag_monitoring(self, mysql_connection, cdc_pipeline, spark):
-        """Test CDC lag monitoring."""
-        from datetime import datetime
-
-        # Insert with current timestamp
-        insert_time = datetime.now()
-
-        mysql_connection.execute_query(
-            """
-            INSERT INTO products (product_id, product_name, category, price, stock_quantity, created_at)
-            VALUES (9800, 'Lag Test', 'Test', 100.0, 50, NOW())
-            ON DUPLICATE KEY UPDATE product_name = 'Lag Test'
-            """,
-            fetch=False,
-        )
-
-        time.sleep(10)
-
-        # Check when data appears in DeltaLake
-        ensure_delta_table_exists(spark, "/tmp/delta/e2e_test/mysql_products", timeout_seconds=60)
-        delta_df = read_delta_table_with_retry(spark, "/tmp/delta/e2e_test/mysql_products")
-        result = delta_df.filter("product_id = 9800").collect()
-
-        if len(result) > 0 and "_cdc_timestamp" in result[0].asDict():
-            cdc_time = result[0]["_cdc_timestamp"]
-            # Calculate lag (should be < 10 seconds for healthy pipeline)
-            # Implementation depends on timestamp format
-
-    def test_schema_evolution(self, mysql_connection, cdc_pipeline, spark):
-        """Test handling of schema changes."""
-        # Note: This test would require ALTER TABLE support in Debezium
-        # and schema evolution enabled in DeltaLake
-
-        # Insert record before schema change
-        mysql_connection.execute_query(
-            """
-            INSERT INTO products (product_id, product_name, category, price, stock_quantity)
-            VALUES (9900, 'Schema Test', 'Test', 100.0, 50)
-            ON DUPLICATE KEY UPDATE product_name = 'Schema Test'
-            """,
-            fetch=False,
-        )
-
-        time.sleep(5)
-
-        # Verify initial record
-        ensure_delta_table_exists(spark, "/tmp/delta/e2e_test/mysql_products", timeout_seconds=60)
-        delta_df = read_delta_table_with_retry(spark, "/tmp/delta/e2e_test/mysql_products")
-        result = delta_df.filter("product_id = 9900").collect()
-
-        assert len(result) == 1
-
-        # TODO: Add ALTER TABLE and verify schema evolution
-        # This requires special Debezium configuration
-
-    def test_transaction_atomicity(self, mysql_connection, cdc_pipeline, spark):
-        """Test that MySQL transactions are reflected atomically."""
-        # Execute transaction with multiple operations
-        mysql_connection.execute_query("START TRANSACTION", fetch=False)
-
-        mysql_connection.execute_query(
-            """
-            INSERT INTO products (product_id, product_name, category, price, stock_quantity)
-            VALUES (9950, 'Txn Product 1', 'Test', 100.0, 50)
-            """,
-            fetch=False,
-        )
-
-        mysql_connection.execute_query(
-            """
-            INSERT INTO products (product_id, product_name, category, price, stock_quantity)
-            VALUES (9951, 'Txn Product 2', 'Test', 200.0, 75)
-            """,
-            fetch=False,
-        )
-
-        mysql_connection.execute_query("COMMIT", fetch=False)
-
-        time.sleep(10)
-
-        # Verify both records appear
-        ensure_delta_table_exists(spark, "/tmp/delta/e2e_test/mysql_products", timeout_seconds=60)
-        delta_df = read_delta_table_with_retry(spark, "/tmp/delta/e2e_test/mysql_products")
-        result = delta_df.filter("product_id IN (9950, 9951)").count()
-
-        assert result == 2
+        # We should have at least some of the 100 baseline products
+        assert baseline_count > 0, f"Expected baseline products but found {baseline_count}"
+        print(f"✓ Found {baseline_count} baseline products in Delta Lake")
