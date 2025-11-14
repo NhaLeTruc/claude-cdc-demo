@@ -20,6 +20,78 @@ def is_port_open(host: str, port: int, timeout: int = 1) -> bool:
         return False
 
 
+def log_service_diagnostics(service_name: str, host: str, port: int):
+    """Log diagnostic information for a failed service."""
+    import subprocess
+
+    print(f"\n{'='*60}")
+    print(f"DIAGNOSTICS for {service_name} ({host}:{port})")
+    print(f"{'='*60}")
+
+    # Check if port is actually in use
+    try:
+        result = subprocess.run(
+            ["netstat", "-an"],
+            capture_output=True,
+            text=True,
+            timeout=5
+        )
+        port_str = str(port)
+        if port_str in result.stdout:
+            print(f"✓ Port {port} appears in netstat output")
+            # Show relevant lines
+            for line in result.stdout.split('\n'):
+                if port_str in line:
+                    print(f"  {line.strip()}")
+        else:
+            print(f"✗ Port {port} NOT found in netstat output")
+    except Exception as e:
+        print(f"⚠ Could not run netstat: {e}")
+
+    # Check Docker container status
+    try:
+        result = subprocess.run(
+            ["docker", "ps", "-a", "--filter", f"expose={port}", "--format", "table {{.Names}}\t{{.Status}}\t{{.Ports}}"],
+            capture_output=True,
+            text=True,
+            timeout=5
+        )
+        print(f"\nDocker containers exposing port {port}:")
+        if result.stdout.strip():
+            print(result.stdout)
+        else:
+            print(f"  (No containers found exposing port {port})")
+    except Exception as e:
+        print(f"⚠ Could not check Docker containers: {e}")
+
+    # Check docker-compose service logs (last 20 lines)
+    try:
+        # Map common service names
+        service_map = {
+            "PostgreSQL": "postgres",
+            "MySQL": "mysql",
+            "Kafka": "kafka",
+            "Debezium": "debezium",
+            "MinIO": "minio"
+        }
+        docker_service = service_map.get(service_name, service_name.lower())
+
+        result = subprocess.run(
+            ["docker", "compose", "logs", "--tail=20", docker_service],
+            capture_output=True,
+            text=True,
+            timeout=5,
+            cwd=Path(__file__).parent.parent.parent
+        )
+        if result.returncode == 0 and result.stdout:
+            print(f"\nRecent logs for {docker_service}:")
+            print(result.stdout[-1000:])  # Last 1000 chars
+    except Exception as e:
+        print(f"⚠ Could not fetch container logs: {e}")
+
+    print(f"{'='*60}\n")
+
+
 def wait_for_service(host: str, port: int, max_attempts: int = 30, service_name: str = "service") -> bool:
     """Wait for a service to be available."""
     print(f"\nWaiting for {service_name} at {host}:{port}...")
@@ -31,6 +103,7 @@ def wait_for_service(host: str, port: int, max_attempts: int = 30, service_name:
             print(f"  Attempt {attempt + 1}/{max_attempts}...")
         time.sleep(2)
     print(f"✗ {service_name} failed to start")
+    log_service_diagnostics(service_name, host, port)
     return False
 
 
