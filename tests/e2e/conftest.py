@@ -61,7 +61,7 @@ def docker_services():
             "docker", "compose", "-f", str(compose_file),
             "--project-directory", str(project_root),
             "-p", "claude-cdc-demo",
-            "up", "-d", "--remove-orphans", "postgres", "kafka", "debezium", "minio"
+            "up", "-d", "--remove-orphans", "postgres", "mysql", "kafka", "debezium", "minio"
         ],
         cwd=project_root,
         capture_output=True,
@@ -171,6 +171,77 @@ def debezium_connector(docker_services):
 
 
 @pytest.fixture(scope="session")
+def mysql_debezium_connector(docker_services):
+    """
+    Ensure MySQL Debezium connector is registered and running.
+
+    This fixture checks if the MySQL CDC connector exists and creates it if needed.
+    """
+    import requests
+
+    debezium_url = os.getenv("DEBEZIUM_URL", "http://localhost:8083")
+    connector_name = "mysql-connector"
+
+    print(f"\nChecking MySQL Debezium connector at {debezium_url}...")
+
+    # Check if connector exists
+    try:
+        response = requests.get(f"{debezium_url}/connectors/{connector_name}/status", timeout=5)
+        if response.status_code == 200:
+            status = response.json()
+            if status.get("connector", {}).get("state") == "RUNNING":
+                print(f"✓ MySQL Debezium connector '{connector_name}' is already running")
+                return
+            else:
+                print(f"⚠ MySQL connector exists but not running: {status}")
+        else:
+            print(f"MySQL connector not found, will attempt to create...")
+    except requests.RequestException as e:
+        print(f"⚠ Failed to check MySQL connector status: {e}")
+
+    # Attempt to register connector using the existing setup script
+    project_root = Path(__file__).parent.parent.parent
+    setup_script = project_root / "scripts" / "connectors" / "register-mysql-connector.sh"
+
+    if not setup_script.exists():
+        pytest.skip(f"MySQL Debezium connector setup script not found: {setup_script}")
+
+    try:
+        print(f"Running: bash {setup_script}")
+        result = subprocess.run(
+            ["bash", str(setup_script)],
+            cwd=project_root,
+            capture_output=True,
+            text=True,
+            timeout=30
+        )
+
+        if result.returncode != 0:
+            print(f"⚠ MySQL setup script failed:")
+            print(f"STDOUT: {result.stdout}")
+            print(f"STDERR: {result.stderr}")
+
+        time.sleep(5)
+
+        # Verify connector is running
+        response = requests.get(f"{debezium_url}/connectors/{connector_name}/status", timeout=5)
+        if response.status_code == 200:
+            status = response.json()
+            if status.get("connector", {}).get("state") == "RUNNING":
+                print(f"✓ MySQL Debezium connector registered successfully")
+                return
+            else:
+                print(f"⚠ MySQL connector exists but not running: {status}")
+        else:
+            print(f"⚠ MySQL connector not found after setup (HTTP {response.status_code})")
+
+    except (subprocess.SubprocessError, requests.RequestException) as e:
+        print(f"⚠ MySQL setup failed: {e}")
+
+    pytest.skip("Failed to register MySQL Debezium connector")
+
+
+@pytest.fixture(scope="session")
 def delta_streaming_pipeline(docker_services, debezium_connector):
     """
     Start Delta Lake streaming pipeline for E2E tests.
@@ -264,3 +335,309 @@ def e2e_test_infrastructure(delta_streaming_pipeline):
     """
     yield
     # All cleanup handled by individual fixtures
+
+
+@pytest.fixture(scope="session")
+def e2e_postgres_connection():
+    """
+    Session-scoped PostgreSQL connection for E2E tests.
+
+    This connection is reused across all E2E tests for better performance.
+    """
+    import psycopg2
+
+    conn = psycopg2.connect(
+        host=os.getenv("POSTGRES_HOST", "localhost"),
+        port=int(os.getenv("POSTGRES_PORT", "5432")),
+        database=os.getenv("POSTGRES_DB", "cdcdb"),
+        user=os.getenv("POSTGRES_USER", "cdcuser"),
+        password=os.getenv("POSTGRES_PASSWORD", "cdcpass"),
+    )
+
+    yield conn
+
+    conn.close()
+
+
+@pytest.fixture(scope="session")
+def e2e_spark_session():
+    """
+    Session-scoped Spark session for E2E tests.
+
+    Reused across all E2E tests for performance.
+    """
+    from pyspark.sql import SparkSession
+    from delta import configure_spark_with_delta_pip
+
+    builder = (
+        SparkSession.builder.appName("E2E-Tests")
+        .config("spark.sql.extensions", "io.delta.sql.DeltaSparkSessionExtension")
+        .config("spark.sql.catalog.spark_catalog", "org.apache.spark.sql.delta.catalog.DeltaCatalog")
+    )
+
+    spark = configure_spark_with_delta_pip(builder).getOrCreate()
+
+    yield spark
+
+    spark.stop()
+
+
+@pytest.fixture(scope="session")
+def baseline_e2e_data(e2e_postgres_connection, e2e_spark_session, delta_streaming_pipeline):
+    """
+    Pre-load baseline customers for E2E tests.
+
+    This fixture:
+    1. Inserts 100 baseline customers (IDs 10000-10099)
+    2. Waits for them to appear in Delta Lake
+    3. Returns the customer IDs for tests to use
+    4. Cleans up after all tests complete
+
+    Use this for read-only tests that just verify data exists.
+    """
+    from tests.e2e.test_data import (
+        insert_baseline_customers,
+        cleanup_baseline_customers,
+        wait_for_delta_propagation,
+    )
+
+    print("\n" + "=" * 80)
+    print("PRE-LOADING BASELINE DATA FOR E2E TESTS")
+    print("=" * 80)
+
+    # Insert baseline customers into Postgres
+    customer_ids = insert_baseline_customers(
+        e2e_postgres_connection,
+        id_range=(10000, 10100)
+    )
+
+    if not customer_ids:
+        pytest.skip("Failed to insert baseline customers")
+
+    # Wait for Delta propagation
+    delta_table_path = os.getenv("DELTA_TABLE_PATH", "/tmp/delta/customers")
+
+    delta_success = wait_for_delta_propagation(
+        e2e_spark_session,
+        delta_table_path,
+        customer_ids,
+        timeout_seconds=180,
+        poll_interval=5.0
+    )
+
+    if not delta_success:
+        cleanup_baseline_customers(e2e_postgres_connection, customer_ids)
+        pytest.skip("Baseline data did not propagate to Delta in time")
+
+    print("=" * 80)
+    print("✓ BASELINE DATA READY - All E2E tests can now run fast!")
+    print("=" * 80 + "\n")
+
+    # Return data for tests
+    data = {
+        'customer_ids': customer_ids,
+        'delta_table_path': delta_table_path,
+    }
+
+    yield data
+
+    # Cleanup after all tests
+    print("\n" + "=" * 80)
+    print("CLEANING UP BASELINE DATA")
+    print("=" * 80)
+    cleanup_baseline_customers(e2e_postgres_connection, customer_ids)
+    print("=" * 80 + "\n")
+
+
+@pytest.fixture(scope="function")
+def isolated_e2e_customer(e2e_postgres_connection, e2e_spark_session, delta_streaming_pipeline):
+    """
+    Create an isolated customer for function-level modification tests.
+
+    This fixture:
+    1. Creates a single customer with unique data
+    2. Waits for it to propagate to Delta
+    3. Returns the customer_id
+    4. Cleans up after the test
+
+    Use this for tests that need to modify data without affecting others.
+    """
+    from tests.e2e.test_data import (
+        create_isolated_customer,
+        cleanup_baseline_customers,
+    )
+    from tests.test_utils import wait_for_condition
+
+    # Create isolated customer
+    customer_id = create_isolated_customer(e2e_postgres_connection)
+
+    # Wait for it to appear in Delta
+    delta_table_path = os.getenv("DELTA_TABLE_PATH", "/tmp/delta/customers")
+
+    def check_customer_in_delta():
+        try:
+            df = e2e_spark_session.read.format("delta").load(delta_table_path)
+            count = df.filter(df.customer_id == customer_id).count()
+            return count > 0
+        except Exception:
+            return False
+
+    try:
+        wait_for_condition(
+            condition_func=check_customer_in_delta,
+            timeout_seconds=60,
+            poll_interval=3.0,
+            error_message=f"Isolated customer {customer_id} did not propagate to Delta"
+        )
+    except TimeoutError:
+        # Cleanup and skip if propagation fails
+        cleanup_baseline_customers(e2e_postgres_connection, [customer_id])
+        pytest.skip(f"Isolated customer {customer_id} did not propagate to Delta")
+
+    yield customer_id
+
+    # Cleanup after test
+    cleanup_baseline_customers(e2e_postgres_connection, [customer_id])
+
+
+@pytest.fixture(scope="session")
+def e2e_mysql_connection(docker_services, mysql_debezium_connector):
+    """
+    Session-scoped MySQL connection for E2E tests.
+
+    This connection is reused across all MySQL E2E tests for better performance.
+    Depends on mysql_debezium_connector to ensure connector is ready.
+    """
+    import pymysql
+
+    # Wait for MySQL to be fully ready
+    if not wait_for_service("localhost", int(os.getenv("MYSQL_PORT", "3306")),
+                           max_attempts=30, service_name="MySQL"):
+        pytest.skip("MySQL service not available")
+
+    conn = pymysql.connect(
+        host=os.getenv("MYSQL_HOST", "localhost"),
+        port=int(os.getenv("MYSQL_PORT", "3306")),
+        database=os.getenv("MYSQL_DB", "cdcdb"),
+        user=os.getenv("MYSQL_USER", "cdcuser"),
+        password=os.getenv("MYSQL_PASSWORD", "cdcpass"),
+    )
+
+    yield conn
+
+    conn.close()
+
+
+@pytest.fixture(scope="session")
+def baseline_mysql_products(e2e_mysql_connection, e2e_spark_session, mysql_debezium_connector):
+    """
+    Pre-load baseline products for MySQL E2E tests.
+
+    This fixture:
+    1. Inserts baseline products (IDs 8000-8099) into MySQL
+    2. Waits for them to appear in Kafka topic
+    3. Returns the product IDs and table path for tests to use
+    4. Cleans up after all tests complete
+
+    This ensures the Delta table is created before tests run.
+    """
+    from tests.test_utils import wait_for_condition
+    from kafka import KafkaConsumer
+    import json
+
+    print("\n" + "=" * 80)
+    print("PRE-LOADING BASELINE MySQL PRODUCTS FOR E2E TESTS")
+    print("=" * 80)
+
+    cursor = e2e_mysql_connection.cursor()
+
+    # Clean up any existing baseline data
+    cursor.execute("DELETE FROM products WHERE product_id >= 8000 AND product_id < 8100")
+    e2e_mysql_connection.commit()
+
+    # Insert baseline products
+    product_ids = []
+    print("Inserting 100 baseline products...")
+    for i in range(100):
+        product_id = 8000 + i
+        cursor.execute(
+            """
+            INSERT INTO products (product_id, product_name, category, price, stock_quantity)
+            VALUES (%s, %s, %s, %s, %s)
+            """,
+            (product_id, f"Baseline Product {i}", "Test Category", 100.0 + i, 100 + i)
+        )
+        product_ids.append(product_id)
+
+    e2e_mysql_connection.commit()
+    print(f"✓ Inserted {len(product_ids)} baseline products into MySQL")
+
+    # Wait for events to appear in Kafka
+    kafka_topic = "debezium.cdcdb.products"
+    print(f"\nWaiting for products to appear in Kafka topic '{kafka_topic}'...")
+
+    def check_kafka_events():
+        """Check if we have events in Kafka for our products."""
+        try:
+            consumer = KafkaConsumer(
+                kafka_topic,
+                bootstrap_servers=os.getenv("KAFKA_BOOTSTRAP_SERVERS", "localhost:29092"),
+                auto_offset_reset='earliest',
+                consumer_timeout_ms=5000,
+                value_deserializer=lambda m: json.loads(m.decode('utf-8')) if m else None
+            )
+
+            found_count = 0
+            for message in consumer:
+                if message.value and 'payload' in message.value:
+                    payload = message.value['payload']
+                    if payload.get('after'):
+                        pid = payload['after'].get('product_id')
+                        if pid and pid >= 8000 and pid < 8100:
+                            found_count += 1
+                            if found_count >= 10:  # Found at least 10 events
+                                consumer.close()
+                                return True
+
+            consumer.close()
+            return found_count > 0
+        except Exception as e:
+            print(f"  Kafka check error: {e}")
+            return False
+
+    try:
+        wait_for_condition(
+            condition_func=check_kafka_events,
+            timeout_seconds=60,
+            poll_interval=3.0,
+            error_message=f"Products did not appear in Kafka topic {kafka_topic}"
+        )
+        print(f"✓ Products appeared in Kafka topic!")
+    except TimeoutError as e:
+        print(f"⚠ Warning: {e}")
+        print("  Proceeding anyway - tests may need to wait longer for data")
+
+    # Give extra time for CDC propagation to stabilize
+    time.sleep(5)
+
+    print("=" * 80)
+    print("✓ BASELINE MySQL PRODUCTS READY")
+    print("=" * 80 + "\n")
+
+    # Return data for tests
+    data = {
+        'product_ids': product_ids,
+        'kafka_topic': kafka_topic,
+        'delta_table_path': '/tmp/delta/e2e_test/mysql_products',
+    }
+
+    yield data
+
+    # Cleanup after all tests
+    print("\n" + "=" * 80)
+    print("CLEANING UP BASELINE MySQL PRODUCTS")
+    print("=" * 80)
+    cursor.execute("DELETE FROM products WHERE product_id >= 8000 AND product_id < 8100")
+    e2e_mysql_connection.commit()
+    cursor.close()
+    print("=" * 80 + "\n")

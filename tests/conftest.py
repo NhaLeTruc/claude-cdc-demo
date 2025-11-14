@@ -306,11 +306,48 @@ def clean_cdc_state():
         except Exception as e:
             print(f"⚠ Error clearing Delta Lake: {e}")
 
-        # Step 3: Skip Iceberg table cleanup
-        # NOTE: We don't delete the Iceberg table to preserve its metadata across test runs.
-        # The Spark job uses CREATE TABLE IF NOT EXISTS, which will reuse existing table.
-        # Postgres TRUNCATE will reset customer_id sequence, so tests won't interfere.
-        print("✓ Skipping Iceberg table cleanup (table structure preserved)")
+        # Step 3: Clean Iceberg table data (but preserve schema)
+        try:
+            # Use PyIceberg to clear the table if available
+            try:
+                from src.cdc_pipelines.iceberg.table_manager import (
+                    IcebergTableManager,
+                    IcebergTableConfig,
+                )
+
+                iceberg_config = IcebergTableConfig(
+                    catalog_name="demo_catalog",
+                    namespace="cdc",
+                    table_name="customers",
+                    warehouse_path="s3://warehouse/iceberg",
+                )
+                iceberg_manager = IcebergTableManager(iceberg_config)
+
+                if iceberg_manager.table_exists():
+                    # Delete all records using PyIceberg
+                    iceberg_manager.delete_data("true")  # Delete all records
+                    print("✓ Cleared Iceberg table data using PyIceberg (preserved schema)")
+                else:
+                    print("✓ Iceberg table doesn't exist yet")
+            except Exception as pyiceberg_err:
+                # Fallback: try using Spark SQL via Docker
+                print(f"⚠ PyIceberg cleanup failed ({pyiceberg_err}), trying Spark SQL...")
+                result = subprocess.run(
+                    ["docker", "exec", "cdc-spark-streaming", "bash", "-c",
+                     "spark-sql --conf spark.sql.catalog.demo_catalog=org.apache.iceberg.spark.SparkCatalog "
+                     "--conf spark.sql.catalog.demo_catalog.type=hadoop "
+                     "--conf spark.sql.catalog.demo_catalog.warehouse=s3://warehouse/iceberg "
+                     "-e 'DELETE FROM demo_catalog.cdc.customers WHERE true;' 2>&1 || true"],
+                    capture_output=True,
+                    timeout=30,
+                    text=True
+                )
+                if "error" not in result.stdout.lower():
+                    print("✓ Cleared Iceberg table using Spark SQL")
+                else:
+                    print(f"⚠ Could not clear Iceberg table: {result.stdout}")
+        except Exception as e:
+            print(f"⚠ Error clearing Iceberg: {e}")
 
         # Step 4: Delete Kafka topics AND Kafka Connect offsets to remove CDC state
         try:
