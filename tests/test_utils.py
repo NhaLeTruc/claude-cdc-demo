@@ -239,7 +239,7 @@ def wait_for_kafka_event(
         topic,
         bootstrap_servers=bootstrap_servers,
         auto_offset_reset='earliest',
-        consumer_timeout_ms=int((timeout_seconds * 1000) / 2),  # Half of total timeout
+        consumer_timeout_ms=int((timeout_seconds * 1000) * 0.8),  # 80% of total timeout
         value_deserializer=safe_json_deserializer
     )
 

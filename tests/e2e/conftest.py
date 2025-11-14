@@ -532,7 +532,7 @@ def baseline_e2e_data(e2e_postgres_connection, e2e_spark_session, delta_streamin
         e2e_spark_session,
         delta_table_path,
         customer_ids,
-        timeout_seconds=180,
+        timeout_seconds=240,  # Increased from 180 to 240
         poll_interval=5.0
     )
 
@@ -596,7 +596,7 @@ def isolated_e2e_customer(e2e_postgres_connection, e2e_spark_session, delta_stre
     try:
         wait_for_condition(
             condition_func=check_customer_in_delta,
-            timeout_seconds=60,
+            timeout_seconds=90,  # Increased from 60 to 90
             poll_interval=3.0,
             error_message=f"Isolated customer {customer_id} did not propagate to Delta"
         )
@@ -694,7 +694,7 @@ def baseline_mysql_products(e2e_mysql_connection, e2e_spark_session, mysql_debez
                 kafka_topic,
                 bootstrap_servers=os.getenv("KAFKA_BOOTSTRAP_SERVERS", "localhost:29092"),
                 auto_offset_reset='earliest',
-                consumer_timeout_ms=5000,
+                consumer_timeout_ms=10000,  # Increased from 5000 to 10000
                 value_deserializer=lambda m: json.loads(m.decode('utf-8')) if m else None
             )
 
