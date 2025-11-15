@@ -137,7 +137,7 @@ def verify_debezium_captures_events(
 
     print(f"Verifying {connector_name} can capture events...")
 
-    # 1. Insert a test record
+    # 1. Connect to database and create Kafka consumer BEFORE inserting
     try:
         conn = psycopg2.connect(
             host=os.getenv("POSTGRES_HOST", "localhost"),
@@ -148,6 +148,21 @@ def verify_debezium_captures_events(
         )
         cursor = conn.cursor()
 
+        # Create consumer FIRST with 'latest' - this establishes the starting point
+        topic = "debezium.public.customers"
+        consumer = KafkaConsumer(
+            topic,
+            bootstrap_servers=kafka_bootstrap,
+            auto_offset_reset='latest',  # Read messages from NOW onwards
+            consumer_timeout_ms=timeout_seconds * 1000,
+            value_deserializer=lambda m: json.loads(m.decode('utf-8')) if m else None,
+            group_id=f"health_check_{uuid.uuid4().hex[:8]}"
+        )
+
+        # Small delay to ensure consumer is fully initialized
+        time.sleep(0.5)
+
+        # NOW insert the test record - consumer will see it
         test_email = f"debezium_health_check_{uuid.uuid4().hex[:8]}@test.com"
         cursor.execute(
             "INSERT INTO customers (email, first_name, last_name) VALUES (%s, %s, %s) RETURNING customer_id",
@@ -163,19 +178,19 @@ def verify_debezium_captures_events(
 
     # 2. Wait for event in Kafka
     try:
-        topic = "debezium.public.customers"
-        consumer = KafkaConsumer(
-            topic,
-            bootstrap_servers=kafka_bootstrap,
-            auto_offset_reset='latest',  # Only read new messages
-            consumer_timeout_ms=timeout_seconds * 1000,
-            value_deserializer=lambda m: json.loads(m.decode('utf-8')) if m else None,
-            group_id=f"health_check_{uuid.uuid4().hex[:8]}"
-        )
 
         found = False
         for message in consumer:
             if message.value:
+                # Handle both flat format (ExtractNewRecordState) and nested format
+                # Flat format: {"customer_id": 123, ...}
+                # Nested format: {"payload": {"after": {"customer_id": 123, ...}}}
+                if message.value.get('customer_id') == test_customer_id:
+                    found = True
+                    print(f"  ✓ CDC event captured successfully!")
+                    break
+
+                # Fallback to nested format for backward compatibility
                 payload = message.value.get('payload', {})
                 after = payload.get('after', {})
                 if after.get('customer_id') == test_customer_id:
